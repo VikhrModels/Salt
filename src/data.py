@@ -59,7 +59,7 @@ class Vikhr4oDatasetBase(Dataset):
         else:
             tokens = torch.cat(
                 [
-                    text_input_tokens.squeeze(1),
+                    text_input_tokens,
                     self.soa,
                     audio_input_tokens,
                     self.eoa,
