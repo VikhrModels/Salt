@@ -51,7 +51,7 @@ class Vikhr4oDatasetBase(Dataset):
                     self.soa,
                     audio_input_tokens,
                     self.eoa,
-                    text_input_tokens.squeeze(1),
+                    text_input_tokens,
                     self.eos,
                 ],
                 dim=1,
@@ -124,7 +124,7 @@ def load_tokenized_data(data_path: str):
         ):
             train_wav = train_wav.map(prepare_text_field)
             val_wav = val_wav.map(prepare_text_field)
-
+    
         if train is None:
             train = train_wav.rename_column("audio_tokens", "audio_tokens_wav")
             val = val_wav.rename_column("audio_tokens", "audio_tokens_wav")
@@ -143,8 +143,8 @@ def load_train_val_splits(dataset: str, tokenizer, quantizer, config):
     train_ds, val_ds = load_tokenized_data(dataset)
     train, val = [], []
 
-    if "librispeech" in dataset or "emilia" in dataset or "music" in dataset:
-        if "asr" in config["tasks"]:
+    if "librispeech" in dataset or "emilia" in dataset or "music" in dataset or "mozilla":
+        if "asr" in config["tasks"] and "ru" not in dataset:
             train.append(
                 Vikhr4oDatasetBase(train_ds, tokenizer, quantizer, True, config)
             )
@@ -268,3 +268,4 @@ def load_data(
             val_datasets.append(val)
 
     return ConcatDataset(train_datasets), ConcatDataset(val_datasets)
+
