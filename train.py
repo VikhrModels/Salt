@@ -75,52 +75,49 @@ def train(
     acc_loss = 0
 
     for step, batch in enumerate(dataloader):
-        try:
-            with accelerator.accumulate(model):
-                # Forward pass
-                outputs = model(**batch)
-                loss = outputs.loss
+        with accelerator.accumulate(model):
+            # Forward pass
+            outputs = model(**batch)
+            loss = outputs.loss
 
-                last_loss = loss.detach().float()
-                total_loss += last_loss
-                acc_loss += last_loss
+            last_loss = loss.detach().float()
+            total_loss += last_loss
+            acc_loss += last_loss
 
-                accelerator.backward(loss)
+            accelerator.backward(loss)
 
-                del batch, loss, outputs
-                torch.cuda.empty_cache()
+            del batch, loss, outputs
+            torch.cuda.empty_cache()
 
-            if accelerator.sync_gradients:
-                accelerator.clip_grad_norm_(model.parameters(), max_grad_norm)
+        if accelerator.sync_gradients:
+            accelerator.clip_grad_norm_(model.parameters(), max_grad_norm)
 
-                optimizer.step()
-                lr_scheduler.step()
-                optimizer.zero_grad()
+            optimizer.step()
+            lr_scheduler.step()
+            optimizer.zero_grad()
 
-                progress_bar.update(1)
-                completed_steps += 1
+            progress_bar.update(1)
+            completed_steps += 1
 
-                acc_loss = acc_loss / int(config["gradient_accumulation_steps"])
-                accelerator.log({"loss": acc_loss.item()})
-                acc_loss = 0
+            acc_loss = acc_loss / int(config["gradient_accumulation_steps"])
+            accelerator.log({"loss": acc_loss.item()})
+            acc_loss = 0
 
-                if completed_steps % checkpointing_steps == 0:
-                    save_checkpoint(
-                        model,
-                        accelerator,
-                        tokenizer,
-                        optimizer,
-                        lr_scheduler,
-                        save_dir,
-                        checkpointing_steps,
-                    )
+            if completed_steps % checkpointing_steps == 0:
+                save_checkpoint(
+                    model,
+                    accelerator,
+                    tokenizer,
+                    optimizer,
+                    lr_scheduler,
+                    save_dir,
+                    checkpointing_steps,
+                )
 
-                torch.cuda.empty_cache()
+            torch.cuda.empty_cache()
 
-            if completed_steps >= max_train_steps:
-                break
-        except:
-            print(batch["input_ids"].shape)
+        if completed_steps >= max_train_steps:
+            break
 
     return total_loss / len(dataloader), completed_steps
 
