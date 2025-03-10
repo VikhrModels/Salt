@@ -81,20 +81,54 @@ def prepare_homebrewltd(cache_dir) -> tuple[Dataset, Dataset]:
 
     return splits["train"], splits["test"]
 
-
-def prepare_emilia(cache_dir) -> tuple[Dataset, Dataset]:
+def _prepare_emilia(file_list, cache_dir, num_samples=100_000) -> tuple[Dataset, Dataset]:
     repo_id = "amphion/Emilia-Dataset"
-    file_list = [f"EN/EN-B{str(i).zfill(6)}.tar" for i in range(200)]
 
     dataset = load_dataset(
-        repo_id, data_files={"en": file_list}, split="en", cache_dir=cache_dir
+        repo_id, data_files=file_list, cache_dir=cache_dir
     )
     shuffled = dataset.shuffle(seed=42)
-    subset = shuffled.select(range(100_000))
-    subset = subset.map(lambda row: {"text": row["json"]["text"]})
+    subset = shuffled['train'].select(range(min(num_samples, len(shuffled['train']))))
+
+    def extract_text(batch):
+        return {"text": [item["text"] for item in batch["json"]]}
+
+    subset = subset.map(extract_text, batched=True)
+
     subset = subset.rename_columns({"__key__": "index", "mp3": "audio"})
     splits = subset.train_test_split(test_size=0.1, seed=42)
     return splits["train"], splits["test"]
+
+
+def prepare_emilia(cache_dir) -> tuple[Dataset, Dataset]:
+    file_list = [f"EN/EN-B{str(i).zfill(6)}.tar" for i in range(200)]
+
+    return _prepare_emilia(file_list, cache_dir, num_samples=100_000)
+
+def prepare_emilia_multilang(cache_dir) -> tuple[Dataset, Dataset]:
+    # max
+    # lang_slugs = {
+    #     'DE': 90,
+    #     'EN': 200,
+    #     'FR': 100,
+    #     'JA': 70,
+    #     'KO': 40,
+    #     'ZH': 200,
+    # }
+    # Test
+    lang_slugs = {
+        'DE': 1,
+        'EN': 1,
+        'FR': 1,
+        'JA': 1,
+        'KO': 1,
+        'ZH': 1,
+    }
+    file_list = []
+    for lang_slug, num_partitions in lang_slugs.items():
+        file_list.extend([f"Emilia/{lang_slug}/{lang_slug}-B{str(i).zfill(6)}.tar" for i in range(num_partitions)])
+
+    return _prepare_emilia(file_list, cache_dir, num_samples=100_000 * len(lang_slugs))
 
 
 def download_clip(
@@ -177,6 +211,7 @@ def prepare_musiccaps(cache_dir: str) -> tuple[Dataset, Dataset]:
 
 DATASET_2_LOAD_FUNCTION = {
     "emilia": prepare_emilia,
+    "emilia_multilang": prepare_emilia_multilang,
     "homebrewltd": prepare_homebrewltd,
     "librispeech": prepare_librispeech,
     "musiccaps": prepare_musiccaps,
