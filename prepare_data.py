@@ -16,7 +16,6 @@ from speechtokenizer import SpeechTokenizer
 from WavTokenizer.encoder.utils import convert_audio
 from WavTokenizer.decoder.pretrained import WavTokenizer
 
-from src.fish_tokenizer import FishAudioTokenizer
 from src.utils.data import DATASET_2_LOAD_FUNCTION
 from src.utils.decoding import decode_audio_wav, decode_audio_speech, decode_audio_fish
 
@@ -84,7 +83,9 @@ def quantize_wavtokenizer(row: dict[str, Any], quantizer: WavTokenizer):
     return {"audio_tokens": codes.numpy()}
 
 
-def quantize_fishtokenizer(row: dict[str, Any], quantizer: FishAudioTokenizer):
+def quantize_fishtokenizer(row: dict[str, Any], quantizer):
+    # quantizer: FishAudioTokenizer
+
     audio_data, sample_rate = row["audio"]["array"], row["audio"]["sampling_rate"]
     text = row["text"]
 
@@ -148,6 +149,14 @@ if __name__ == "__main__":
     config_path = config["quantizer_config_path"]
     ckpt_path = config["quantizer_ckpt_path"]
 
+    train_dataset, val_dataset = DATASET_2_LOAD_FUNCTION[data](path_to_cache)
+    hash_value = hashlib.md5(data.encode()).hexdigest()
+
+    print(
+        "Number of samples in dataset:",
+        f"train - {len(train_dataset)}, val - {len(val_dataset)}",
+    )
+
     if quantizer_type == "speech":
         quantizer = SpeechTokenizer.load_from_checkpoint(config_path, ckpt_path)
         quantizer.eval().to(device)
@@ -160,17 +169,12 @@ if __name__ == "__main__":
 
         codebook_size = quantizer.feature_extractor.encodec.quantizer.bins
     elif quantizer_type == "fish":
+        from src.fish_tokenizer import FishAudioTokenizer
+
         quantizer = FishAudioTokenizer(ckpt_path, config_path)
     else:
         raise ValueError("Unknown tokenize type.")
 
-    train_dataset, val_dataset = DATASET_2_LOAD_FUNCTION[data](path_to_cache)
-    hash_value = hashlib.md5(data.encode()).hexdigest()
-
-    print(
-        "Number of samples in dataset:",
-        f"train - {len(train_dataset)}, val - {len(val_dataset)}",
-    )
 
     if args.debug:
         verify_decoding(train_dataset[0], quantizer, quantizer_type)
@@ -236,3 +240,5 @@ if __name__ == "__main__":
             }
         )
         dataset.push_to_hub(prepared_data_path, private=True, token=hf_token)
+
+        breakpoint()
