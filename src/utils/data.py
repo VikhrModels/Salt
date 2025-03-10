@@ -58,6 +58,8 @@ def prepare_parler_tts_with_description(cache_dir) -> tuple[Dataset, Dataset]:
     audio_features_train = train_audio["audio"]
     audio_features_val = val_audio["audio"]
 
+    os.makedirs("cache/", exist_ok=True)
+
     train_text = train_text.map(
         lambda x, i: {"audio": audio_features_train[i]},
         with_indices=True,
