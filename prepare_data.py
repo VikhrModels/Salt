@@ -14,11 +14,14 @@ import torch
 
 from WavTokenizer.encoder.utils import convert_audio
 from WavTokenizer.decoder.pretrained import WavTokenizer
+from BigCodec.vq.codec_encoder import CodecEncoder
+from BigCodec.vq.codec_decoder import CodecDecoder
 
 from src.quantize.wavtokenizer import quantize_wavtokenizer_batch
 
 from src.utils.data import DATASET_2_LOAD_FUNCTION
 from src.utils.decoding import decode_audio_wav, decode_audio_speech, decode_audio_fish
+
 
 load_dotenv()
 hf_token = os.getenv("HF_TOKEN")
@@ -48,6 +51,23 @@ data = config["raw_data"]
 prepared_data_path = config["prepared_data_path"]
 
 device = "cuda:0"
+
+
+class BigCodecTokenizer:
+    def __init__(self, ckpt_path):
+        ckpt = torch.load(ckpt_path, map_location="cpu")
+        encoder = CodecEncoder()
+        encoder.load_state_dict(ckpt["CodecEnc"])
+        self.encoder = encoder.eval().cuda()
+
+        decoder = CodecDecoder()
+        decoder.load_state_dict(ckpt["generator"])
+        self.decoder = decoder.eval().cuda()
+
+    def encode(self, wav):
+        vq_emb = self.encoder(wav.unsqueeze(1))
+        _, vq_code, _ = self.decoder(vq_emb, vq=True)
+        return vq_code
 
 
 def resample(audio: np.ndarray, sr: int, target_sr: int):
@@ -87,6 +107,17 @@ def quantize_wavtokenizer(row: dict[str, Any], quantizer: WavTokenizer):
     audio = audio.to(quantizer.head.out.weight.device)
     _, codes = quantizer.encode_infer(audio, bandwidth_id=bandwidth_id)
     codes = codes.squeeze(1)
+    codes = codes.cpu()
+
+    return {"audio_tokens": codes.numpy()}
+
+
+def quantize_bigcodec_tokenizer(row: dict[str, Any], quantizer: BigCodecTokenizer):
+    audio_data, sample_rate = row["audio"]["array"], row["audio"]["sampling_rate"]
+
+    audio = resample(audio_data, sample_rate, 16000)
+    codes = quantizer.encode(audio)
+    codes = codes.squeeze(0, 1)
     codes = codes.cpu()
 
     return {"audio_tokens": codes.numpy()}
@@ -137,6 +168,9 @@ def verify_decoding(example, quantizer, quantizer_type: str):
             1,
         )
 
+    elif quantizer_type == "big-codec":
+        codes = quantize_bigcodec_tokenizer(example, quantizer)["audio_tokens"]
+
     elif quantizer_type == "fish":
         codes = quantize_fishtokenizer(example, quantizer)["audio_tokens"]
         codes = torch.tensor(codes, dtype=torch.long, device=device)
@@ -178,13 +212,16 @@ if __name__ == "__main__":
         quantizer = quantizer.to(device)
 
         codebook_size = quantizer.feature_extractor.encodec.quantizer.bins
+
+    elif quantizer_type == "big-codec":
+        quantizer = BigCodecTokenizer(ckpt_path)
+
     elif quantizer_type == "fish":
         from src.fish_tokenizer import FishAudioTokenizer
 
         quantizer = FishAudioTokenizer(ckpt_path, config_path)
     else:
         raise ValueError("Unknown tokenize type.")
-
 
     if args.debug:
         verify_decoding(train_dataset[0], quantizer, quantizer_type)
