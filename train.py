@@ -66,8 +66,8 @@ def train(
     lr_scheduler,
     completed_steps,
     progress_bar,
-    max_train_steps,
     save_dir,
+    max_grad_norm,
 ):
     model.train()
     total_loss = 0
@@ -313,23 +313,20 @@ if __name__ == "__main__":
         model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
     )
 
-    num_update_steps_per_epoch = math.ceil(
-        len(train_dataloader) / int(config["gradient_accumulation_steps"])
+    total_batch_size = (
+        config["train_batch_size"]
+        * accelerator.num_processes
+        * int(config["gradient_accumulation_steps"])
     )
-    max_train_steps = config["num_train_epochs"] * num_update_steps_per_epoch
 
-    num_train_epochs = math.ceil(max_train_steps / num_update_steps_per_epoch)
+    num_train_epochs = config["num_train_epochs"]
+    max_train_steps = num_train_epochs * math.ceil(len(train_dataloader) / accelerator.num_processes / int(config["gradient_accumulation_steps"]))
 
     accelerator.init_trackers(
         config["wandb_project_name"],
         {"lr_scheduler_type": config["lr_scheduler_type"]},
     )
 
-    total_batch_size = (
-        config["train_batch_size"]
-        * accelerator.num_processes
-        * int(config["gradient_accumulation_steps"])
-    )
 
     print("***** Running training *****")
     print(f"  Num examples = {len(train_dataset)}")
@@ -356,8 +353,8 @@ if __name__ == "__main__":
             lr_scheduler,
             completed_steps,
             progress_bar,
-            max_train_steps,
             exp_save_dir,
+            max_grad_norm,
         )
         print(f"EPOCH {epoch + 1} train loss:", train_loss)
         eval(

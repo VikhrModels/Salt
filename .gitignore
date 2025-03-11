@@ -166,3 +166,4 @@ cache
 
 wandb/
 results/
+configs/cryri/
