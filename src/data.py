@@ -5,6 +5,9 @@ from torch.utils.data import Dataset, ConcatDataset
 
 class Vikhr4oDatasetBase(Dataset):
     def __init__(self, dataset, tokenizer, quantizer, asr: bool, config):
+
+        assert dataset is not None
+
         self.dataset = dataset
         self.tokenizer = tokenizer
         self.quantizer = quantizer
@@ -97,7 +100,12 @@ def prepare_text_field(row):
 
 def load_tokenized_data(data_path: str):
     speech_path = data_path + "-speech"
-    wav_path = data_path + "-wav-unify"
+
+    wav_path = data_path
+    if '-wav-' not in data_path:
+        wav_path = data_path + "-wav-unify"
+
+    train, val = None, None
 
     try:
         speech = load_dataset(speech_path)
@@ -110,9 +118,8 @@ def load_tokenized_data(data_path: str):
         train = train_speech.rename_column("audio_tokens", "audio_tokens_speech")
         val = val_speech.rename_column("audio_tokens", "audio_tokens_speech")
 
-    except:
-        print(f"No speech data found for {data_path}.")
-        train, val = None, None
+    except Exception as e:
+        print(f"No speech data found for {data_path}.: {e}")
 
     try:
         wav = load_dataset(wav_path)
@@ -132,9 +139,12 @@ def load_tokenized_data(data_path: str):
             train = train.add_column("audio_tokens_wav", train_wav["audio_tokens"])
             val = val.add_column("audio_tokens_wav", val_wav["audio_tokens"])
 
-    except:
-        print(f"No wav data found for {data_path}.")
+    except Exception as e:
+        print(f"No wav data found for {data_path}.: {e}")
         train_wav, val_wav = None, None
+
+    if train is None and val is None:
+        raise ValueError(f"No data found for {data_path}.")
 
     return train, val
 
@@ -258,6 +268,14 @@ def load_data(
 
     for dataset in audio_datasets:
         train, val = load_train_val_splits(dataset, tokenizer, quantizer, config)
+
+        for split in [train, val]:
+            for dataset in split:
+                print("Filter out long sequences")
+                print("Before filtering:", len(dataset))
+                dataset.dataset = dataset.dataset.filter( lambda x: len(x['audio_tokens_wav'][0]) < 512 )
+                print("After filtering:", len(dataset))
+
         train_datasets.extend(train)
         val_datasets.extend(val)
 
@@ -266,6 +284,7 @@ def load_data(
             train, val = load_text_dataset(text_ds, tokenizer, config["max_seq_length"])
             train_datasets.append(train)
             val_datasets.append(val)
+
 
     return ConcatDataset(train_datasets), ConcatDataset(val_datasets)
 

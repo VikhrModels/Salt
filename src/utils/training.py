@@ -88,22 +88,20 @@ def save_checkpoint(
         torch.save(scheduler.state_dict(), os.path.join(path, "scheduler.pt"))
 
 
-def left_pad_sequence(sequences, padding_value=0):
+def left_pad_sequence(sequences, padding_value=0, absolute_max_length=1024):
     # Find the maximum length in the batch
     max_length = max(seq.size(0) for seq in sequences)
 
+    assert absolute_max_length > max_length
+    max_length = absolute_max_length
+
     # Apply left-padding to each sequence
-    padded_sequences = [
-        torch.cat(
-            [
-                torch.full((max_length - seq.size(0), *seq.shape[1:]), padding_value),
-                seq,
-            ],
-            dim=0,
-        )
-        for seq in sequences
-    ]
-    return torch.stack(padded_sequences)
+    padded_sequences = torch.full((len(sequences), max_length), fill_value=padding_value)
+
+    for i, seq in enumerate(sequences):
+        padded_sequences[i, -seq.size(0):] = seq
+
+    return padded_sequences
 
 
 def collate_fn(batch, tokenizer, max_seq_length=512):

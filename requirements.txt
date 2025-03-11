@@ -6,4 +6,5 @@ python-dotenv==1.0.1
 speechtokenizer==1.0.1
 tqdm==4.66.5
 transformers==4.44.0
-wandb==0.17.6
+wandb==0.19.8
+dotenv==0.9.9

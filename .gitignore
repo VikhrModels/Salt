@@ -163,3 +163,7 @@ cython_debug/
 
 *.wav
 cache
+
+wandb/
+results/
+configs/cryri/
