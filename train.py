@@ -50,7 +50,6 @@ checkpointing_steps = int(config["checkpointing_steps"])
 
 max_seq_length = int(config["max_seq_length"])
 max_grad_norm = float(config["max_grad_norm"])
-freeze_params = config["freeze"]
 
 torch.backends.cuda.matmul.allow_tf32 = config["allow_tf32"]
 torch.backends.cudnn.allow_tf32 = config["allow_tf32"]
@@ -62,7 +61,7 @@ wandb.login(key=os.getenv("WB_KEY"))
 def train(
     model,
     dataloader,
-    accelerator,
+    accelerator: Accelerator,
     optimizer,
     lr_scheduler,
     completed_steps,
@@ -77,7 +76,7 @@ def train(
     for step, batch in enumerate(dataloader):
         with accelerator.accumulate(model):
             # Forward pass
-            outputs = model(**batch)
+            outputs = model(**batch, use_cache=False)
             loss = outputs.loss
 
             last_loss = loss.detach().float()
@@ -86,38 +85,37 @@ def train(
 
             accelerator.backward(loss)
 
-            del batch, loss, outputs
-            torch.cuda.empty_cache()
-
         if accelerator.sync_gradients:
             accelerator.clip_grad_norm_(model.parameters(), max_grad_norm)
 
-            optimizer.step()
-            lr_scheduler.step()
-            optimizer.zero_grad()
+        optimizer.step()
+        lr_scheduler.step()
+        optimizer.zero_grad()
 
-            progress_bar.update(1)
+        if step % accelerator.gradient_accumulation_steps == 0:
             completed_steps += 1
+            progress_bar.update(1)
 
-            acc_loss = acc_loss / int(config["gradient_accumulation_steps"])
-            accelerator.log({"loss": acc_loss.item()})
-            acc_loss = 0
+        acc_loss = acc_loss / int(config["gradient_accumulation_steps"])
+        accelerator.log({"loss": acc_loss.item()})
+        acc_loss = 0
 
-            if completed_steps % checkpointing_steps == 0:
-                save_checkpoint(
-                    model,
-                    accelerator,
-                    tokenizer,
-                    optimizer,
-                    lr_scheduler,
-                    save_dir,
-                    checkpointing_steps,
-                )
+        if completed_steps % checkpointing_steps == 0:
+            save_checkpoint(
+                model,
+                accelerator,
+                tokenizer,
+                optimizer,
+                lr_scheduler,
+                save_dir,
+                checkpointing_steps,
+            )
 
-            torch.cuda.empty_cache()
 
-        if completed_steps >= max_train_steps:
-            break
+
+    # Empty cache only at the end of the epoch
+    del batch, loss, outputs
+    torch.cuda.empty_cache()
 
     return total_loss / len(dataloader), completed_steps
 
@@ -138,7 +136,7 @@ def eval(
     for batch in eval_progress_bar:
         with torch.no_grad():
             # Forward pass
-            outputs = model(**batch)
+            outputs = model(**batch, use_cache=False)
             loss = outputs.loss
             losses.append(
                 accelerator.gather_for_metrics(
@@ -202,8 +200,6 @@ if __name__ == "__main__":
             cache_dir=path_to_cache,
         )
 
-    model.gradient_checkpointing_enable()
-
     if tokenizer.pad_token is None:
         tokenizer.add_special_tokens(
             {"pad_token": "[PAD]"}
@@ -217,8 +213,8 @@ if __name__ == "__main__":
     n_tokens = len(tokenizer)
     print("Not audio tokens:", n_tokens)
 
-    start_audio_token_id = tokenizer(start_audio_token)["input_ids"][-1]
-    end_audio_token_id = tokenizer(end_audio_token)["input_ids"][-1]
+    start_audio_token_id = tokenizer._convert_token_to_id_with_added_voc(start_audio_token)
+    end_audio_token_id = tokenizer._convert_token_to_id_with_added_voc(end_audio_token)
 
     tokens_config = get_start_tokens(config["quantizer"], n_tokens)
     quantizer = AudioTokenizer(config["quantizer"], tokens_config)
@@ -232,19 +228,25 @@ if __name__ == "__main__":
 
     model.resize_token_embeddings(n_tokens + codebook_size)
 
+    model = torch.compile(model)
+    # slows down training - better to increase gradient accumulation steps and decrease batch size
+    # model.gradient_checkpointing_enable()
+
     sampler = RandomSampler(data_source=train_dataset, replacement=True)
     train_dataloader = DataLoader(
         train_dataset,
         sampler=sampler,
         collate_fn=lambda x: collate_fn(x, tokenizer, max_seq_length),
         batch_size=int(config["train_batch_size"]),
-        num_workers=16,
+        num_workers=0,
+        drop_last=True,
     )
     eval_dataloader = DataLoader(
         val_dataset,
         collate_fn=lambda x: collate_fn(x, tokenizer, max_seq_length),
         batch_size=int(config["eval_batch_size"]),
-        num_workers=16,
+        num_workers=0,
+        drop_last=True,
     )
 
     no_decay = ["bias", "layer_norm.weight"]
