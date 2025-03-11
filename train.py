@@ -85,20 +85,21 @@ def train(
 
             accelerator.backward(loss)
 
-        if accelerator.sync_gradients:
-            accelerator.clip_grad_norm_(model.parameters(), max_grad_norm)
+            if accelerator.sync_gradients:
+                accelerator.clip_grad_norm_(model.parameters(), max_grad_norm)
 
-        optimizer.step()
-        lr_scheduler.step()
-        optimizer.zero_grad()
+            optimizer.step()
+            lr_scheduler.step()
+            optimizer.zero_grad()
 
         if step % accelerator.gradient_accumulation_steps == 0:
             completed_steps += 1
             progress_bar.update(1)
 
-        acc_loss = acc_loss / int(config["gradient_accumulation_steps"])
-        accelerator.log({"loss": acc_loss.item()})
-        acc_loss = 0
+        if accelerator.is_main_process and completed_steps % 10 == 0:
+            acc_loss = acc_loss / int(config["gradient_accumulation_steps"])
+            accelerator.log({"loss": acc_loss.item()}, step=completed_steps)
+            acc_loss = 0
 
         if completed_steps % checkpointing_steps == 0:
             save_checkpoint(
