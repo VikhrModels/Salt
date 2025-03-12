@@ -32,6 +32,10 @@ class Vikhr4oDatasetBase(Dataset):
             "input_ids"
         ][:, -1:]
 
+        self.bos = tokenizer(config["start_sequence_token"], return_tensors="pt")[
+            "input_ids"
+        ][:, -1:]
+
     def __len__(self):
         return len(self.dataset)
 
@@ -51,6 +55,7 @@ class Vikhr4oDatasetBase(Dataset):
         if self.asr:
             tokens = torch.cat(
                 [
+                    self.bos,
                     self.soa,
                     audio_input_tokens,
                     self.eoa,
@@ -62,6 +67,7 @@ class Vikhr4oDatasetBase(Dataset):
         else:
             tokens = torch.cat(
                 [
+                    self.bos,
                     text_input_tokens,
                     self.soa,
                     audio_input_tokens,
@@ -77,6 +83,7 @@ class Vikhr4oDatasetBase(Dataset):
             "input_ids": tokens,
             "attention_mask": attention_mask,
             "labels": tokens.clone(),
+            "is_asr": torch.ones([1]) * self.asr,
         }
 
 
@@ -98,7 +105,7 @@ def prepare_text_field(row):
     return {"text": row["json"]["text"]}
 
 
-def load_tokenized_data(data_path: str):
+def load_tokenized_data(data_path: str, few_val_samples=None):
     speech_path = data_path + "-speech"
 
     wav_path = data_path
@@ -131,7 +138,7 @@ def load_tokenized_data(data_path: str):
         ):
             train_wav = train_wav.map(prepare_text_field)
             val_wav = val_wav.map(prepare_text_field)
-    
+
         if train is None:
             train = train_wav.rename_column("audio_tokens", "audio_tokens_wav")
             val = val_wav.rename_column("audio_tokens", "audio_tokens_wav")
@@ -146,11 +153,14 @@ def load_tokenized_data(data_path: str):
     if train is None and val is None:
         raise ValueError(f"No data found for {data_path}.")
 
+    if val is not None and few_val_samples is not None and few_val_samples > 0:
+        val = val.select(range(few_val_samples))
+
     return train, val
 
 
-def load_train_val_splits(dataset: str, tokenizer, quantizer, config):
-    train_ds, val_ds = load_tokenized_data(dataset)
+def load_train_val_splits(dataset: str, tokenizer, quantizer, config, few_val_samples=None):
+    train_ds, val_ds = load_tokenized_data(dataset, few_val_samples=few_val_samples)
     train, val = [], []
 
     if "librispeech" in dataset or "emilia" in dataset or "music" in dataset or "mozilla":
@@ -261,13 +271,13 @@ def load_text_dataset(dataset_path: str, tokenizer, max_length: int):
 
 
 def load_data(
-    audio_datasets: list[str], tokenizer, quantizer, config
+    audio_datasets: list[str], tokenizer, quantizer, config, few_val_samples=None
 ) -> tuple[Dataset, Dataset]:
     train_datasets: list[Dataset] = []
     val_datasets: list[Dataset] = []
 
     for dataset in audio_datasets:
-        train, val = load_train_val_splits(dataset, tokenizer, quantizer, config)
+        train, val = load_train_val_splits(dataset, tokenizer, quantizer, config, few_val_samples=few_val_samples)
 
         for split in [train, val]:
             for dataset in split:
