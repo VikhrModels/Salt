@@ -32,6 +32,10 @@ class Vikhr4oDatasetBase(Dataset):
             "input_ids"
         ][:, -1:]
 
+        self.bos = tokenizer(config["start_sequence_token"], return_tensors="pt")[
+            "input_ids"
+        ][:, -1:]
+
     def __len__(self):
         return len(self.dataset)
 
@@ -51,6 +55,7 @@ class Vikhr4oDatasetBase(Dataset):
         if self.asr:
             tokens = torch.cat(
                 [
+                    self.bos,
                     self.soa,
                     audio_input_tokens,
                     self.eoa,
@@ -62,6 +67,7 @@ class Vikhr4oDatasetBase(Dataset):
         else:
             tokens = torch.cat(
                 [
+                    self.bos,
                     text_input_tokens,
                     self.soa,
                     audio_input_tokens,
