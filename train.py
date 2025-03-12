@@ -176,8 +176,8 @@ if __name__ == "__main__":
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
         data_collator=lambda x: collate_fn(x, tokenizer, config["max_seq_length"]),
-        compute_metrics=ComputeMetrics(config["tasks"])
     )
+    trainer.compute_metrics = ComputeMetrics(trainer, config["tasks"])
 
     trainer.accelerator.log_with = [ 'wandb' ]
     trainer.accelerator.init_trackers(

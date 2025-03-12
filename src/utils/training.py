@@ -88,7 +88,7 @@ def save_checkpoint(
         torch.save(scheduler.state_dict(), os.path.join(path, "scheduler.pt"))
 
 
-def left_pad_sequence(sequences, padding_value=0, absolute_max_length=768):
+def left_pad_sequence(sequences, padding_value=0, absolute_max_length=1024):
     # Find the maximum length in the batch
     max_length = max(seq.size(0) for seq in sequences)
 
