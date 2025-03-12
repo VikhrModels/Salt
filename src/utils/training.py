@@ -88,7 +88,7 @@ def save_checkpoint(
         torch.save(scheduler.state_dict(), os.path.join(path, "scheduler.pt"))
 
 
-def left_pad_sequence(sequences, padding_value=0, absolute_max_length=1024):
+def left_pad_sequence(sequences, padding_value=0, absolute_max_length=768):
     # Find the maximum length in the batch
     max_length = max(seq.size(0) for seq in sequences)
 
@@ -111,11 +111,13 @@ def collate_fn(batch, tokenizer, max_seq_length=512):
         input_ids = item["input_ids"][:max_seq_length]
         attention_mask = item["attention_mask"][:max_seq_length]
         labels = item["labels"][:max_seq_length]
+        is_asr = item["is_asr"][:max_seq_length]
         truncated_batch.append(
             {
                 "input_ids": input_ids,
                 "attention_mask": attention_mask,
                 "labels": labels,
+                "is_asr": is_asr,
             }
         )
 
@@ -123,16 +125,20 @@ def collate_fn(batch, tokenizer, max_seq_length=512):
     input_ids = [item["input_ids"] for item in truncated_batch]
     attention_masks = [item["attention_mask"] for item in truncated_batch]
     labels = [item["labels"] for item in truncated_batch]
+    is_asr = [item["is_asr"] for item in truncated_batch]
 
     # Pad sequences to the max length in the batch
     input_ids = left_pad_sequence(input_ids, padding_value=tokenizer.pad_token_id)
     attention_masks = left_pad_sequence(attention_masks, padding_value=0)
-    labels = left_pad_sequence(labels, padding_value=tokenizer.pad_token_id)
+    labels = left_pad_sequence(labels, padding_value=-100)
+    is_asr = torch.cat(is_asr, dim=0)
 
     return {
         "input_ids": input_ids,
         "attention_mask": attention_masks,
         "labels": labels,
+        "is_asr": is_asr,
+
     }
 
 
