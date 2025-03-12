@@ -157,8 +157,4 @@ if __name__ == "__main__":
         project_name=config["wandb_project_name"],
     )
 
-    assert len(trainer.accelerator.trackers) > 0
-
-    breakpoint()
-
     trainer.train()
