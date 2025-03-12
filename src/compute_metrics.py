@@ -28,8 +28,8 @@ class ComputeMetrics():
         assert 'is_asr' in inputs
 
         gather_function = self.trainer.gather_function
-        is_asr_mask = gather_function((inputs['is_asr'])) == 1
-        not_asr_mask = gather_function((inputs['is_asr'])) == 0
+        is_asr_mask = (gather_function((inputs['is_asr'])) == 1).bool()
+        not_asr_mask = ~is_asr_mask
 
         attention_mask = gather_function((inputs['attention_mask']))
 
@@ -41,12 +41,12 @@ class ComputeMetrics():
         self.asr_loss += self.criterion(predictions[is_asr_mask].flatten(0, 1), label_ids[is_asr_mask].flatten(0, 1)).item()
         self.tts_loss += self.criterion(predictions[not_asr_mask].flatten(0, 1), label_ids[not_asr_mask].flatten(0, 1)).item()
 
-        matrics = {}
+        metrics = {}
 
         if compute_result:
-            matrics["asr_loss"] = self.asr_loss / self.asr_samples
-            matrics["tts_loss"] = self.tts_loss / self.tts_samples
+            metrics["asr_loss"] = self.asr_loss / self.asr_samples
+            metrics["tts_loss"] = self.tts_loss / self.tts_samples
 
             self._reset_metrics_accumulation()
 
-        return matrics
+        return metrics
