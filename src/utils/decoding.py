@@ -20,6 +20,32 @@ def get_audio_padding_tokens(quantizer, device):
     return {"audio_tokens": codes.squeeze(1)}
 
 
+def decode_audio_bigcodec(
+    tokens,
+    quantizer,
+    n_original_tokens,
+    n_codebooks,
+    start_audio_token_id: Optional[int] = None,
+    end_audio_token_id: Optional[int] = None,
+    device="cuda",
+):
+    # find audio start and end tokens
+    start, end = get_audio_start_end_tokens(
+        tokens, start_audio_token_id, end_audio_token_id
+    )
+
+    # subtract length of original vocabulary -> tokens in range [0, 1024)
+    audio_tokens = tokens[start:end] % n_original_tokens
+    emb = quantizer.decoder.vq2emb(audio_tokens).transpose(1, 2)
+    audio = quantizer.decoder(emb, vq=False).squeeze().detach().cpu().numpy()
+
+    del tokens
+    del audio_tokens
+    torch.cuda.empty_cache()
+
+    return AudioSignal(audio, 16000)
+
+
 def get_audio_start_end_tokens(
     tokens: torch.Tensor,
     start_audio_token_id: Optional[int],
@@ -39,9 +65,9 @@ def get_audio_start_end_tokens(
     else:
         end = tokens.shape[-1]
 
-    assert (
-        start < end
-    ), f"Start of audio must be before end. Found: start - {start}, end - {end}"
+    assert start < end, (
+        f"Start of audio must be before end. Found: start - {start}, end - {end}"
+    )
 
     return start, end
 

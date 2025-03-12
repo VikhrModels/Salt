@@ -20,8 +20,12 @@ from BigCodec.vq.codec_decoder import CodecDecoder
 from src.quantize.wavtokenizer import quantize_wavtokenizer_batch
 
 from src.utils.data import DATASET_2_LOAD_FUNCTION
-from src.utils.decoding import decode_audio_wav, decode_audio_speech, decode_audio_fish
-
+from src.utils.decoding import (
+    decode_audio_wav,
+    decode_audio_speech,
+    decode_audio_fish,
+    decode_audio_bigcodec,
+)
 
 load_dotenv()
 hf_token = os.getenv("HF_TOKEN")
@@ -98,7 +102,7 @@ def quantize_speechtokenizer(row: dict[str, Any], quantizer):
     return {"audio_tokens": codes.numpy()}
 
 
-def quantize_wavtokenizer(row: dict[str, Any], quantizer: WavTokenizer):
+def quantize_wavtokenizer(row: dict[str, Any], quantizer):
     audio_data, sample_rate = row["audio"]["array"], int(row["audio"]["sampling_rate"])
 
     audio = resample(audio_data, sample_rate, 24000)
@@ -170,6 +174,15 @@ def verify_decoding(example, quantizer, quantizer_type: str):
 
     elif quantizer_type == "big-codec":
         codes = quantize_bigcodec_tokenizer(example, quantizer)["audio_tokens"]
+        codes = torch.tensor(codes, dtype=torch.long, device=device)
+        codes = codes.view(1, -1, 1)
+
+        audio = decode_audio_bigcodec(
+            codes,
+            quantizer,
+            quantizer.decoder.quantizer.layers[0].codebook_size,
+            quantizer.decoder.quantizer.num_quantizers,
+        )
 
     elif quantizer_type == "fish":
         codes = quantize_fishtokenizer(example, quantizer)["audio_tokens"]
@@ -281,6 +294,22 @@ if __name__ == "__main__":
                 batched=True,
                 batch_size=50,
                 # num_proc=16,
+            )
+        elif quantizer_type == "big-codec":
+            print("Using BigCodec tokenizer.")
+            train_dataset = train_dataset.map(
+                quantize_bigcodec_tokenizer,
+                fn_kwargs={"quantizer": quantizer},
+                cache_file_name=os.path.join(
+                    path_to_cache, f"tokenize_train_bigcodec_{hash_value}"
+                ),
+            )
+            val_dataset = val_dataset.map(
+                quantize_bigcodec_tokenizer,
+                fn_kwargs={"quantizer": quantizer},
+                cache_file_name=os.path.join(
+                    path_to_cache, f"tokenize_val_bigcodec_{hash_value}"
+                ),
             )
 
         elif quantizer_type == "fish":
