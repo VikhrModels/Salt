@@ -10,7 +10,7 @@ end_audio_token: "<|end_of_audio|>"
 n_special_tokens: 3
 
 data:
-  - Vikhrmodels/parler_tts_with_description_quantized-wav-uni
+  # - Vikhrmodels/parler_tts_with_description_quantized-wav-uni
   - Vikhrmodels/emilia_multilang_quantized-wav-uni
 
 text_data: []

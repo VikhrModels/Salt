@@ -12,7 +12,6 @@ import yaml
 from datasets import DatasetDict
 import torch
 
-from speechtokenizer import SpeechTokenizer
 from WavTokenizer.encoder.utils import convert_audio
 from WavTokenizer.decoder.pretrained import WavTokenizer
 
@@ -57,7 +56,10 @@ def resample(audio: np.ndarray, sr: int, target_sr: int):
     return resampled.to(device)
 
 
-def quantize_speechtokenizer(row: dict[str, Any], quantizer: SpeechTokenizer):
+def quantize_speechtokenizer(row: dict[str, Any], quantizer):
+    from speechtokenizer import SpeechTokenizer
+
+    quantizer: SpeechTokenizer
     audio_data, sample_rate = row["audio"]["array"], row["audio"]["sampling_rate"]
 
     audio = resample(audio_data, sample_rate, quantizer.sample_rate)
@@ -150,7 +152,7 @@ if __name__ == "__main__":
     ckpt_path = config["quantizer_ckpt_path"]
 
     train_dataset, val_dataset = DATASET_2_LOAD_FUNCTION[data](path_to_cache)
-    hash_value = hashlib.md5(data.encode()).hexdigest()
+    hash_value = "_" + hashlib.md5(data.encode()).hexdigest()
 
     print(
         "Number of samples in dataset:",
@@ -158,6 +160,7 @@ if __name__ == "__main__":
     )
 
     if quantizer_type == "speech":
+        from speechtokenizer import SpeechTokenizer
         quantizer = SpeechTokenizer.load_from_checkpoint(config_path, ckpt_path)
         quantizer.eval().to(device)
 
