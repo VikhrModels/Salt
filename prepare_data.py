@@ -15,6 +15,8 @@ import torch
 from WavTokenizer.encoder.utils import convert_audio
 from WavTokenizer.decoder.pretrained import WavTokenizer
 
+from src.quantize.wavtokenizer import quantize_wavtokenizer_batch
+
 from src.utils.data import DATASET_2_LOAD_FUNCTION
 from src.utils.decoding import decode_audio_wav, decode_audio_speech, decode_audio_fish
 
@@ -51,9 +53,13 @@ device = "cuda:0"
 def resample(audio: np.ndarray, sr: int, target_sr: int):
     audio = torch.tensor(audio, dtype=torch.float32)
     audio = audio.unsqueeze(0)
-    # 1 as last arg corresponds to mono audio
-    resampled = convert_audio(audio, sr, target_sr, 1)
-    return resampled.to(device)
+
+    if sr != target_sr:
+        # 1 as last arg corresponds to mono audio
+        audio = convert_audio(audio, sr, target_sr, 1)
+
+    return audio
+
 
 
 def quantize_speechtokenizer(row: dict[str, Any], quantizer):
@@ -78,6 +84,7 @@ def quantize_wavtokenizer(row: dict[str, Any], quantizer: WavTokenizer):
     audio = resample(audio_data, sample_rate, 24000)
     bandwidth_id = torch.tensor([0])
 
+    audio = audio.to(quantizer.head.out.weight.device)
     _, codes = quantizer.encode_infer(audio, bandwidth_id=bandwidth_id)
     codes = codes.squeeze(1)
     codes = codes.cpu()
@@ -187,6 +194,7 @@ if __name__ == "__main__":
             train_dataset = train_dataset.map(
                 quantize_speechtokenizer,
                 fn_kwargs={"quantizer": quantizer},
+                remove_columns=["audio"],
                 cache_file_name=os.path.join(
                     path_to_cache, f"tokenize_train_speech_{hash_value}"
                 ),
@@ -194,30 +202,55 @@ if __name__ == "__main__":
             val_dataset = val_dataset.map(
                 quantize_speechtokenizer,
                 fn_kwargs={"quantizer": quantizer},
+                remove_columns=["audio"],
                 cache_file_name=os.path.join(
                     path_to_cache, f"tokenize_val_speech_{hash_value}"
                 ),
             )
         elif quantizer_type == "wav":
             print("Using wav tokenizer.")
+
+            def filter_long_audio(examples):
+                result_list = []
+                for example in examples["audio"]:
+                    is_ok = example['array'].shape[-1] < example['sampling_rate'] * 10
+                    result_list.append(is_ok)
+
+                return result_list
+
+            # from multiprocess import set_start_method
+            # set_start_method("spawn")
+
+            # train_dataset = train_dataset.select(range(10000))
+            train_dataset = train_dataset.filter(filter_long_audio, batched=True, keep_in_memory=True, num_proc=16)
+
             train_dataset = train_dataset.map(
-                quantize_wavtokenizer,
+                quantize_wavtokenizer_batch,
+                remove_columns=["audio"],
+                keep_in_memory=True,
                 fn_kwargs={"quantizer": quantizer},
-                cache_file_name=os.path.join(
-                    path_to_cache, f"tokenize_train_wav_{hash_value}"
-                ),
+                batched=True,
+                batch_size=50,
+                # num_proc=16,
             )
+
+            val_dataset = val_dataset.filter(filter_long_audio, batched=True, keep_in_memory=True, num_proc=16)
+
             val_dataset = val_dataset.map(
-                quantize_wavtokenizer,
+                quantize_wavtokenizer_batch,
+                remove_columns=["audio"],
+                keep_in_memory=True,
                 fn_kwargs={"quantizer": quantizer},
-                cache_file_name=os.path.join(
-                    path_to_cache, f"tokenize_val_wav_{hash_value}"
-                ),
+                batched=True,
+                batch_size=50,
+                # num_proc=16,
             )
+
         elif quantizer_type == "fish":
             print("Using fish tokenizer.")
             train_dataset = train_dataset.map(
                 quantize_fishtokenizer,
+                remove_columns=["audio"],
                 fn_kwargs={"quantizer": quantizer},
                 cache_file_name=os.path.join(
                     path_to_cache, f"tokenize_train_fish_{hash_value}"
@@ -226,6 +259,7 @@ if __name__ == "__main__":
             val_dataset = val_dataset.map(
                 quantize_fishtokenizer,
                 fn_kwargs={"quantizer": quantizer},
+                remove_columns=["audio"],
                 cache_file_name=os.path.join(
                     path_to_cache, f"tokenize_val_fish_{hash_value}"
                 ),
@@ -233,15 +267,13 @@ if __name__ == "__main__":
         else:
             raise ValueError("Unknown tokenize type.")
 
-        train_dataset = train_dataset.remove_columns(["audio"])
-        val_dataset = val_dataset.remove_columns(["audio"])
-
         dataset = DatasetDict(
             {
                 "train": train_dataset,
                 "validation": val_dataset,
             }
         )
-        dataset.push_to_hub(prepared_data_path, private=True, token=hf_token)
 
         breakpoint()
+
+        dataset.push_to_hub(prepared_data_path, private=True, token=hf_token)
