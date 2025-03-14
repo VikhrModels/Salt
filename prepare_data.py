@@ -274,6 +274,4 @@ if __name__ == "__main__":
             }
         )
 
-        breakpoint()
-
-        dataset.push_to_hub(prepared_data_path, private=True, token=hf_token)
+        dataset.push_to_hub('Vikhrmodels/' + prepared_data_path, private=True, token=hf_token)
