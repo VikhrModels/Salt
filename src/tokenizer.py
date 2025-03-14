@@ -45,9 +45,13 @@ class AudioTokenizer:
             )
         elif quantizer["quantizer"] == "wav":
             raw_tokens = torch.tensor(row["audio_tokens_wav"])
+            if raw_tokens.ndim == 1:
+                raw_tokens = raw_tokens.unsqueeze(0)
+
             audio_tokens = (
                 raw_tokens[: quantizer["n_codebooks"]] + self.tokens_config["wav"]
             )
+
         else:
             raise ValueError("Unknown quantizer.")
 
