@@ -1,18 +1,13 @@
-import argparse
-import math
 import os
 import yaml
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Union, Any, Union, Dict, Tuple
+from typing import Optional
 
-
-from tqdm import tqdm
 from dotenv import load_dotenv
 import wandb
 
 import torch
-from torch.utils.data import DataLoader, RandomSampler
 
 from transformers import (
     Trainer,
@@ -20,18 +15,12 @@ from transformers import (
     HfArgumentParser,
     AutoTokenizer,
     AutoModelForCausalLM,
-    get_scheduler,
-)
-from accelerate import (
-    Accelerator,
-    DistributedDataParallelKwargs,
-    InitProcessGroupKwargs,
 )
 
 from src.compute_metrics import ComputeMetrics
 from src.data import load_data
 from src.tokenizer import AudioTokenizer, get_start_tokens
-from src.utils.training import save_checkpoint, get_exp_name, collate_fn
+from src.utils.training import collate_fn
 
 @dataclass
 class SaltTrainingArguments(TrainingArguments):
@@ -151,6 +140,7 @@ if __name__ == "__main__":
     codebook_size = (
         config["quantizer"]["speech"]["n_new_tokens"]
         + config["quantizer"]["wav"]["n_new_tokens"]
+        + config["quantizer"]["bigcodec"]["n_new_tokens"]
     )
     print("New tokens:", codebook_size)
     train_dataset, val_dataset = load_data(data, tokenizer, quantizer, config, few_val_samples=training_args.few_val_samples)

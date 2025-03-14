@@ -105,50 +105,89 @@ def prepare_text_field(row):
     return {"text": row["json"]["text"]}
 
 
-def load_tokenized_data(data_path: str, few_val_samples=None):
-    speech_path = data_path + "-speech"
+def load_tokenized_data(data_path: str, config, few_val_samples=None):
+    speech_path = data_path
+    if "-speech" not in data_path:
+        speech_path = data_path + "-speech"
 
     wav_path = data_path
-    if '-wav-' not in data_path:
+    if "-wav-" not in data_path:
         wav_path = data_path + "-wav-unify"
+
+    bgicodec_path = data_path
+    if "bigcodec" not in data_path:
+        bigcodec_path = data_path + "-bigcodec"
 
     train, val = None, None
 
-    try:
-        speech = load_dataset(speech_path)
-        train_speech, val_speech = speech["train"], speech["validation"]
+    if config["quantizer"]["speech"]["n_new_tokens"]:
+        try:
+            speech = load_dataset(speech_path)
+            train_speech, val_speech = speech["train"], speech["validation"]
 
-        if "text" not in train_speech.column_names:
-            train_speech = train_speech.map(prepare_text_field)
-            val_speech = val_speech.map(prepare_text_field)
+            if "text" not in train_speech.column_names:
+                train_speech = train_speech.map(prepare_text_field)
+                val_speech = val_speech.map(prepare_text_field)
 
-        train = train_speech.rename_column("audio_tokens", "audio_tokens_speech")
-        val = val_speech.rename_column("audio_tokens", "audio_tokens_speech")
+            train = train_speech.rename_column("audio_tokens", "audio_tokens_speech")
+            val = val_speech.rename_column("audio_tokens", "audio_tokens_speech")
 
-    except Exception as e:
-        print(f"No speech data found for {data_path}.: {e}")
+        except Exception as e:
+            print(f"No speech data found for {data_path}: {e}")
 
-    try:
-        wav = load_dataset(wav_path)
-        train_wav, val_wav = wav["train"], wav["validation"]
+    if config["quantizer"]["wav"]["n_new_tokens"]:
+        try:
+            wav = load_dataset(wav_path)
+            train_wav, val_wav = wav["train"], wav["validation"]
 
-        if (
-            "text" not in train_wav.column_names
-            and "text_description" not in train_wav.column_names
-        ):
-            train_wav = train_wav.map(prepare_text_field)
-            val_wav = val_wav.map(prepare_text_field)
+            if (
+                "text" not in train_wav.column_names
+                and "text_description" not in train_wav.column_names
+            ):
+                train_wav = train_wav.map(prepare_text_field)
+                val_wav = val_wav.map(prepare_text_field)
 
-        if train is None:
-            train = train_wav.rename_column("audio_tokens", "audio_tokens_wav")
-            val = val_wav.rename_column("audio_tokens", "audio_tokens_wav")
-        else:
-            train = train.add_column("audio_tokens_wav", train_wav["audio_tokens"])
-            val = val.add_column("audio_tokens_wav", val_wav["audio_tokens"])
+            if train is None:
+                train = train_wav.rename_column("audio_tokens", "audio_tokens_wav")
+                val = val_wav.rename_column("audio_tokens", "audio_tokens_wav")
+            else:
+                train = train.add_column("audio_tokens_wav", train_wav["audio_tokens"])
+                val = val.add_column("audio_tokens_wav", val_wav["audio_tokens"])
 
-    except Exception as e:
-        print(f"No wav data found for {data_path}.: {e}")
-        train_wav, val_wav = None, None
+        except Exception as e:
+            print(f"No wav data found for {data_path}: {e}")
+            train_wav, val_wav = None, None
+
+    if config["quantizer"]["bigcodec"]["n_new_tokens"]:
+        try:
+            bigcodec = load_dataset(bigcodec_path)
+            train_bigcodec, val_bigcodec = bigcodec["train"], bigcodec["validation"]
+
+            if (
+                "text" not in train_bigcodec.column_names
+                and "text_description" not in train_bigcodec.column_names
+            ):
+                train_bigcodec = train_bigcodec.map(prepare_text_field)
+                val_bigcodec = val_bigcodec.map(prepare_text_field)
+
+            if train is None:
+                train = train_bigcodec.rename_column(
+                    "audio_tokens", "audio_tokens_bigcodec"
+                )
+                val = val_bigcodec.rename_column(
+                    "audio_tokens", "audio_tokens_bigcodec"
+                )
+            else:
+                train = train.add_column(
+                    "audio_tokens_bigcodec", train_bigcodec["audio_tokens"]
+                )
+                val = val.add_column(
+                    "audio_tokens_bigcodec", val_bigcodec["audio_tokens"]
+                )
+
+        except Exception as e:
+            print(f"No bigcodec data found for {data_path}: {e}")
+            train_bigcodec, val_wav = None, None
 
     if train is None and val is None:
         raise ValueError(f"No data found for {data_path}.")
@@ -159,8 +198,12 @@ def load_tokenized_data(data_path: str, few_val_samples=None):
     return train, val
 
 
-def load_train_val_splits(dataset: str, tokenizer, quantizer, config, few_val_samples=None):
-    train_ds, val_ds = load_tokenized_data(dataset, few_val_samples=few_val_samples)
+def load_train_val_splits(
+    dataset: str, tokenizer, quantizer, config, few_val_samples=None
+):
+    train_ds, val_ds = load_tokenized_data(
+        dataset, config, few_val_samples=few_val_samples
+    )
     train, val = [], []
 
     if "librispeech" in dataset or "emilia" in dataset or "music" in dataset or "mozilla":
@@ -279,12 +322,15 @@ def load_data(
     for dataset in audio_datasets:
         train, val = load_train_val_splits(dataset, tokenizer, quantizer, config, few_val_samples=few_val_samples)
 
-        for split in [train, val]:
-            for dataset in split:
-                print("Filter out long sequences")
-                print("Before filtering:", len(dataset))
-                dataset.dataset = dataset.dataset.filter( lambda x: len(x['audio_tokens_wav']) < 512 )
-                print("After filtering:", len(dataset))
+        if config["filter_long_audio"]:
+            for split in [train, val]:
+                for dataset in split:
+                    print("Filter out long sequences")
+                    print("Before filtering:", len(dataset))
+                    dataset.dataset = dataset.dataset.filter(
+                        lambda x: len(x["audio_tokens_wav"][0]) < 512
+                    )
+                    print("After filtering:", len(dataset))
 
         train_datasets.extend(train)
         val_datasets.extend(val)
@@ -295,6 +341,4 @@ def load_data(
             train_datasets.append(train)
             val_datasets.append(val)
 
-
     return ConcatDataset(train_datasets), ConcatDataset(val_datasets)
-

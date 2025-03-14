@@ -16,6 +16,9 @@ def get_start_tokens(quantizer_config, n_base_tokens):
     if "wav" in types:
         tokens_config["wav"] = n_base_tokens
         n_base_tokens += quantizer_config["wav"]["n_new_tokens"]
+    if "bigcodec" in types:
+        tokens_config["bigcodec"] = n_base_tokens
+        n_base_tokens += quantizer_config["bigcodec"]["n_new_tokens"]
 
     return tokens_config
 
@@ -51,7 +54,12 @@ class AudioTokenizer:
             audio_tokens = (
                 raw_tokens[: quantizer["n_codebooks"]] + self.tokens_config["wav"]
             )
-
+        elif quantizer["quantizer"] == "bigcodec":
+            raw_tokens = torch.tensor(row["audio_tokens_bigcodec"])
+            raw_tokens = raw_tokens.reshape(1, -1)
+            audio_tokens = (
+                raw_tokens[: quantizer["n_codebooks"]] + self.tokens_config["bigcodec"]
+            )
         else:
             raise ValueError("Unknown quantizer.")
 

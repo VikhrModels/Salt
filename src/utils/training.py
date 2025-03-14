@@ -69,9 +69,7 @@ def save_checkpoint(
         os.makedirs(path, exist_ok=True)
 
     if isinstance(model, FSDP):
-        with FSDP.state_dict_type(
-            model, StateDictType.FULL_STATE_DICT
-        ):
+        with FSDP.state_dict_type(model, StateDictType.FULL_STATE_DICT):
             state_dict = model.state_dict()
             if accelerator.is_main_process:
                 torch.save(state_dict, os.path.join(path, "pytorch_model.bin"))
@@ -88,15 +86,17 @@ def save_checkpoint(
         torch.save(scheduler.state_dict(), os.path.join(path, "scheduler.pt"))
 
 
-def left_pad_sequence(sequences, padding_value=0, absolute_max_length=1024):
+def left_pad_sequence(sequences, padding_value=0, absolute_max_length=768):
     # Find the maximum length in the batch
     max_length = max(seq.size(0) for seq in sequences)
 
-    assert absolute_max_length > max_length
-    max_length = absolute_max_length
+    if absolute_max_length <= max_length:
+        max_length = absolute_max_length
 
     # Apply left-padding to each sequence
-    padded_sequences = torch.full((len(sequences), max_length), fill_value=padding_value)
+    padded_sequences = torch.full(
+        (len(sequences), max_length), fill_value=padding_value
+    )
 
     for i, seq in enumerate(sequences):
         padded_sequences[i, -seq.size(0):] = seq
@@ -156,6 +156,6 @@ def get_exp_name(config):
             name += f"_{tq['quantizer']}_{tq['n_codebooks']}"
 
     if len(config["text_data"]):
-        name += f"_text"
+        name += "_text"
 
     return name
