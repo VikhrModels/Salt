@@ -2,8 +2,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from datasets import Audio, Dataset, load_dataset, Value
-from huggingface_hub import hf_hub_download
+from datasets import Audio, Dataset, load_dataset, concatenate_datasets, Value
 
 
 def prepare_librispeech(cache_dir) -> tuple[Dataset, Dataset]:
@@ -131,6 +130,7 @@ def prepare_emilia(cache_dir) -> tuple[Dataset, Dataset]:
 
     return _prepare_emilia(file_list, cache_dir, num_samples=1_000_000)
 
+
 def prepare_emilia_multilang(cache_dir) -> tuple[Dataset, Dataset]:
     # max
     # lang_slugs = {
@@ -241,6 +241,24 @@ def prepare_musiccaps(cache_dir: str) -> tuple[Dataset, Dataset]:
     return splits["train"], splits["test"]
 
 
+def load_mozilla_slavic(cache_dir: str):
+    # slavic_langs = ["ab", "be", "bg", "cs", "mhr", "mdf", "pl", "ru", "sr", "sk", "sl", "uk"]
+    slavic_langs = ["ru", "uk"]
+
+    train, val = [], []
+    for lang in slavic_langs:
+        subset = load_dataset("mozilla-foundation/common_voice_12_0", lang)
+        train.append(subset["train"])
+        val.append(subset["validation"])
+
+    train = concatenate_datasets(train)
+    val = concatenate_datasets(val)
+
+    train = train.rename_column("sentence", "text")
+    val = val.rename_column("sentence", "text")
+    return train, val
+
+
 DATASET_2_LOAD_FUNCTION = {
     "emilia": prepare_emilia,
     "emilia_multilang": prepare_emilia_multilang,
@@ -248,6 +266,7 @@ DATASET_2_LOAD_FUNCTION = {
     "urban_flan": prepare_urban_flan,
     "homebrewltd": prepare_homebrewltd,
     "librispeech": prepare_librispeech,
+    "mozilla_slavic": load_mozilla_slavic,
     "musiccaps": prepare_musiccaps,
     "parler-tts": prepare_parler_tts,
     "parler_tts_with_description": prepare_parler_tts_with_description,

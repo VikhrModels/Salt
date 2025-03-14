@@ -127,9 +127,34 @@ def quantize_bigcodec_tokenizer(row: dict[str, Any], quantizer: BigCodecTokenize
     return {"audio_tokens": codes.numpy()}
 
 
-def quantize_fishtokenizer(row: dict[str, Any], quantizer):
-    # quantizer: FishAudioTokenizer
+def quantize_bigcodec_tokenizer_batched(
+    row: dict[str, Any], quantizer: BigCodecTokenizer
+):
+    sample_rate = row["audio"][0]["sampling_rate"]
+    audio_arrays = []
+    for arr in row["audio"]:
+        resampled = resample(arr["array"], sample_rate, 16000)
+        audio_arrays.append(resampled)
 
+    max_length = max(array.shape[1] for array in audio_arrays)
+
+    padded_audio_tensors = [
+        torch.nn.functional.pad(
+            tensor, (0, max_length - tensor.shape[1]), mode="constant", value=0
+        )
+        for tensor in audio_arrays
+    ]
+
+    audio = torch.stack(padded_audio_tensors, dim=0).squeeze(1)
+
+    codes = quantizer.encode(audio)
+    codes = codes.squeeze(0)
+    codes = codes.cpu()
+
+    return {"audio_tokens": codes.numpy()}
+
+
+def quantize_fishtokenizer(row: dict[str, Any], quantizer):
     audio_data, sample_rate = row["audio"]["array"], row["audio"]["sampling_rate"]
     text = row["text"]
 
@@ -298,14 +323,18 @@ if __name__ == "__main__":
         elif quantizer_type == "big-codec":
             print("Using BigCodec tokenizer.")
             train_dataset = train_dataset.map(
-                quantize_bigcodec_tokenizer,
+                quantize_bigcodec_tokenizer_batched,
+                batched=True,
+                batch_size=2,
                 fn_kwargs={"quantizer": quantizer},
                 cache_file_name=os.path.join(
                     path_to_cache, f"tokenize_train_bigcodec_{hash_value}"
                 ),
             )
             val_dataset = val_dataset.map(
-                quantize_bigcodec_tokenizer,
+                quantize_bigcodec_tokenizer_batched,
+                batched=True,
+                batch_size=2,
                 fn_kwargs={"quantizer": quantizer},
                 cache_file_name=os.path.join(
                     path_to_cache, f"tokenize_val_bigcodec_{hash_value}"
