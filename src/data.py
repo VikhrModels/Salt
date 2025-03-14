@@ -283,7 +283,7 @@ def load_data(
             for dataset in split:
                 print("Filter out long sequences")
                 print("Before filtering:", len(dataset))
-                dataset.dataset = dataset.dataset.filter( lambda x: len(x['audio_tokens_wav'][0]) < 512 )
+                dataset.dataset = dataset.dataset.filter( lambda x: len(x['audio_tokens_wav']) < 512 )
                 print("After filtering:", len(dataset))
 
         train_datasets.extend(train)
