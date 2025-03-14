@@ -110,7 +110,7 @@ def _prepare_emilia(file_list, cache_dir, num_samples=None) -> tuple[Dataset, Da
     repo_id = "amphion/Emilia-Dataset"
 
     dataset = load_dataset(
-        repo_id, data_files=file_list, cache_dir=cache_dir
+        repo_id, data_files=file_list, cache_dir=cache_dir, num_proc=16
     )
     subset = dataset.shuffle(seed=42)
 
