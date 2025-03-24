@@ -128,9 +128,9 @@ def collate_fn(batch, tokenizer, max_seq_length=512):
     is_asr = [item["is_asr"] for item in truncated_batch]
 
     # Pad sequences to the max length in the batch
-    input_ids = left_pad_sequence(input_ids, padding_value=tokenizer.pad_token_id)
-    attention_masks = left_pad_sequence(attention_masks, padding_value=0)
-    labels = left_pad_sequence(labels, padding_value=-100)
+    input_ids = left_pad_sequence(input_ids, padding_value=tokenizer.pad_token_id, absolute_max_length=max_seq_length)
+    attention_masks = left_pad_sequence(attention_masks, padding_value=0, absolute_max_length=max_seq_length)
+    labels = left_pad_sequence(labels, padding_value=-100, absolute_max_length=max_seq_length)
     is_asr = torch.cat(is_asr, dim=0)
 
     return {

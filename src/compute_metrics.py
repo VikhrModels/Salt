@@ -44,8 +44,10 @@ class ComputeMetrics():
         metrics = {}
 
         if compute_result:
-            metrics["asr_loss"] = self.asr_loss / self.asr_samples
-            metrics["tts_loss"] = self.tts_loss / self.tts_samples
+            if self.asr_samples:
+                metrics["asr_loss"] = self.asr_loss / self.asr_samples
+            if self.tts_samples:
+                metrics["tts_loss"] = self.tts_loss / self.tts_samples
 
             self._reset_metrics_accumulation()
 
