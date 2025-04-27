@@ -85,7 +85,6 @@ def resample(audio: np.ndarray, sr: int, target_sr: int):
     return audio
 
 
-
 def quantize_speechtokenizer(row: dict[str, Any], quantizer):
     from speechtokenizer import SpeechTokenizer
 
@@ -240,6 +239,7 @@ if __name__ == "__main__":
 
     if quantizer_type == "speech":
         from speechtokenizer import SpeechTokenizer
+
         quantizer = SpeechTokenizer.load_from_checkpoint(config_path, ckpt_path)
         quantizer.eval().to(device)
 
@@ -288,7 +288,7 @@ if __name__ == "__main__":
             def filter_long_audio(examples):
                 result_list = []
                 for example in examples["audio"]:
-                    is_ok = example['array'].shape[-1] < example['sampling_rate'] * 10
+                    is_ok = example["array"].shape[-1] < example["sampling_rate"] * 10
                     result_list.append(is_ok)
 
                 return result_list
@@ -297,7 +297,9 @@ if __name__ == "__main__":
             # set_start_method("spawn")
 
             # train_dataset = train_dataset.select(range(10000))
-            train_dataset = train_dataset.filter(filter_long_audio, batched=True, keep_in_memory=True, num_proc=16)
+            train_dataset = train_dataset.filter(
+                filter_long_audio, batched=True, keep_in_memory=True, num_proc=16
+            )
 
             train_dataset = train_dataset.map(
                 quantize_wavtokenizer_batch,
@@ -309,7 +311,9 @@ if __name__ == "__main__":
                 # num_proc=16,
             )
 
-            val_dataset = val_dataset.filter(filter_long_audio, batched=True, keep_in_memory=True, num_proc=16)
+            val_dataset = val_dataset.filter(
+                filter_long_audio, batched=True, keep_in_memory=True, num_proc=16
+            )
 
             val_dataset = val_dataset.map(
                 quantize_wavtokenizer_batch,
@@ -369,4 +373,6 @@ if __name__ == "__main__":
             }
         )
 
-        dataset.push_to_hub('Vikhrmodels/' + prepared_data_path, private=True, token=hf_token)
+        dataset.push_to_hub(
+            "Vikhrmodels/" + prepared_data_path, private=True, token=hf_token
+        )

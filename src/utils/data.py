@@ -85,20 +85,23 @@ def prepare_homebrewltd(cache_dir) -> tuple[Dataset, Dataset]:
 
 def prepare_urban_flan(cache_dir) -> tuple[Dataset, Dataset]:
     repo_id = "Vikhrmodels/urban_flan_dataset"
-    dataset = load_dataset(
-        repo_id, cache_dir=cache_dir
-    )
+    dataset = load_dataset(repo_id, cache_dir=cache_dir)
 
-    shuffled = dataset['train'].shuffle(seed=42)
+    shuffled = dataset["train"].shuffle(seed=42)
 
     def fix_audio_format(example):
         return {
             "audio": {
-                "array": example['audio_array'],
+                "array": example["audio_array"],
                 "sampling_rate": example["sampling_rate"],
             }
         }
-    shuffled = shuffled.map(fix_audio_format, keep_in_memory=True, remove_columns=["audio_array", "sampling_rate"])
+
+    shuffled = shuffled.map(
+        fix_audio_format,
+        keep_in_memory=True,
+        remove_columns=["audio_array", "sampling_rate"],
+    )
 
     splits = shuffled.train_test_split(test_size=2048, seed=42)
 
@@ -113,8 +116,8 @@ def _prepare_emilia(file_list, cache_dir, num_samples=None) -> tuple[Dataset, Da
     )
     subset = dataset.shuffle(seed=42)
 
-    if num_samples is not None and num_samples < len(subset['train']):
-        subset = subset['train'].select(range(num_samples))
+    if num_samples is not None and num_samples < len(subset["train"]):
+        subset = subset["train"].select(range(num_samples))
 
     def extract_text(batch):
         return {"text": [item["text"] for item in batch["json"]]}
@@ -124,6 +127,7 @@ def _prepare_emilia(file_list, cache_dir, num_samples=None) -> tuple[Dataset, Da
     subset = subset.rename_columns({"__key__": "index", "mp3": "audio"})
     splits = subset.train_test_split(test_size=2048, seed=42)
     return splits["train"], splits["test"]
+
 
 def prepare_emilia(cache_dir) -> tuple[Dataset, Dataset]:
     file_list = [f"EN/EN-B{str(i).zfill(6)}.tar" for i in range(200)]
@@ -143,22 +147,28 @@ def prepare_emilia_multilang(cache_dir) -> tuple[Dataset, Dataset]:
     # }
     # Test
     lang_slugs = {
-        'DE': 10,
-        'EN': 10,
-        'FR': 10,
-        'JA': 10,
-        'KO': 10,
-        'ZH': 10,
+        "DE": 10,
+        "EN": 10,
+        "FR": 10,
+        "JA": 10,
+        "KO": 10,
+        "ZH": 10,
     }
     file_list = []
     for lang_slug, num_partitions in lang_slugs.items():
-        file_list.extend([f"Emilia/{lang_slug}/{lang_slug}-B{str(i).zfill(6)}.tar" for i in range(num_partitions)])
+        file_list.extend(
+            [
+                f"Emilia/{lang_slug}/{lang_slug}-B{str(i).zfill(6)}.tar"
+                for i in range(num_partitions)
+            ]
+        )
 
-    return _prepare_emilia(file_list, cache_dir, num_samples=1_000_000 * len(lang_slugs))
+    return _prepare_emilia(
+        file_list, cache_dir, num_samples=1_000_000 * len(lang_slugs)
+    )
 
 
 def prepare_emilia_full(cache_dir) -> tuple[Dataset, Dataset]:
-
     file_list = None
     return _prepare_emilia(file_list, cache_dir)
 

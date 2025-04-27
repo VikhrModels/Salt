@@ -10,15 +10,15 @@ def get_start_tokens(quantizer_config, n_base_tokens):
     types = asr_types + tts_types
 
     tokens_config = {}
-    if "speech" in types:
-        tokens_config["speech"] = n_base_tokens
-        n_base_tokens += quantizer_config["speech"]["n_new_tokens"]
     if "wav" in types:
         tokens_config["wav"] = n_base_tokens
         n_base_tokens += quantizer_config["wav"]["n_new_tokens"]
     if "bigcodec" in types:
         tokens_config["bigcodec"] = n_base_tokens
         n_base_tokens += quantizer_config["bigcodec"]["n_new_tokens"]
+    if "speech" in types:
+        tokens_config["speech"] = n_base_tokens
+        n_base_tokens += quantizer_config["speech"]["n_new_tokens"]
 
     return tokens_config
 

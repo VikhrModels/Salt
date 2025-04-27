@@ -5,7 +5,6 @@ from torch.utils.data import Dataset, ConcatDataset
 
 class Vikhr4oDatasetBase(Dataset):
     def __init__(self, dataset, tokenizer, quantizer, asr: bool, config):
-
         assert dataset is not None
 
         self.dataset = dataset
@@ -64,6 +63,7 @@ class Vikhr4oDatasetBase(Dataset):
                 ],
                 dim=1,
             ).squeeze(0)
+            start = self.bos.shape[-1] + self.soa.shape[-1] + audio_input_tokens.shape[-1] + self.eoa.shape[-1]
         else:
             tokens = torch.cat(
                 [
@@ -76,13 +76,16 @@ class Vikhr4oDatasetBase(Dataset):
                 ],
                 dim=1,
             ).squeeze(0)
+            start = self.bos.shape[-1] + self.soa.shape[-1] + text_input_tokens.shape[-1]
 
         attention_mask = torch.ones(len(tokens))
+        labels = tokens.clone()
+        labels[:start] = -100
 
         return {
             "input_ids": tokens,
             "attention_mask": attention_mask,
-            "labels": tokens.clone(),
+            "labels": labels,
             "is_asr": torch.ones([1]) * self.asr,
         }
 
@@ -99,6 +102,83 @@ class Vikhr4oDatasetVoiceDescription(Vikhr4oDatasetBase):
             )
         text_tokenized = self.tokenizer(text, return_tensors="pt")
         return text_tokenized["input_ids"]
+
+
+class Vikhr4oDatasetTranscription(Vikhr4oDatasetBase):
+    def __getitem__(self, idx):
+        row = self.dataset[idx]
+
+        prefix = self.tokenizer("Transcribe the audio: ", return_tensors="pt")[
+            "input_ids"
+        ]
+        text_input_tokens = self.get_text_tokens(row)
+
+        if self.asr:
+            audio_input_tokens = self.quantizer.quantize_asr(row)
+        else:
+            audio_input_tokens = self.quantizer.quantize_tts(row)
+
+        if self.asr:
+            tokens = torch.cat(
+                [
+                    self.bos,
+                    prefix,
+                    self.soa,
+                    audio_input_tokens,
+                    self.eoa,
+                    text_input_tokens,
+                    self.eos,
+                ],
+                dim=1,
+            ).squeeze(0)
+        else:
+            tokens = torch.cat(
+                [
+                    self.bos,
+                    text_input_tokens,
+                    self.soa,
+                    audio_input_tokens,
+                    self.eoa,
+                    self.eos,
+                ],
+                dim=1,
+            ).squeeze(0)
+
+        attention_mask = torch.ones(len(tokens))
+        labels = tokens.clone()
+
+        if self.asr:
+            # In ASR mode, only text_input_tokens + eos are target
+            # Compute offsets
+            start = (
+                self.bos.shape[-1]
+                + prefix.shape[-1]
+                + self.soa.shape[-1]
+                + audio_input_tokens.shape[-1]
+                + self.eoa.shape[-1]
+            )
+        else:
+            assert False
+
+        # Mask all tokens except the ones we want to supervise
+        labels[:start] = -100
+        # labels[end:] = -100
+
+        return {
+            "input_ids": tokens,
+            "attention_mask": attention_mask,
+            "labels": labels,
+            "is_asr": torch.ones([1]) * self.asr,
+        }
+
+        # attention_mask = torch.ones(len(tokens))
+        #
+        # return {
+        #     "input_ids": tokens,
+        #     "attention_mask": attention_mask,
+        #     "labels": tokens.clone(),
+        #     "is_asr": torch.ones([1]) * self.asr,
+        # }
 
 
 def prepare_text_field(row):
@@ -206,12 +286,32 @@ def load_train_val_splits(
     )
     train, val = [], []
 
-    if "librispeech" in dataset or "emilia" in dataset or "music" in dataset or "mozilla":
-        if "asr" in config["tasks"] and "ru" not in dataset:
+    if (
+        "librispeech" in dataset
+        or "emilia" in dataset
+        or "music" in dataset
+        or "mozilla" in dataset
+        or "audiobooks" in dataset
+    ):
+        if "asr" in config["tasks"] and "mozilla" not in dataset and "audiobooks" not in dataset:
+            # train.append(
+            #     Vikhr4oDatasetTranscription(
+            #         train_ds, tokenizer, quantizer, True, config
+            #     )
+            # )
+            # val.append(
+            #     Vikhr4oDatasetTranscription(val_ds, tokenizer, quantizer, True, config)
+            # )
             train.append(
-                Vikhr4oDatasetBase(train_ds, tokenizer, quantizer, True, config)
+                Vikhr4oDatasetBase(
+                    train_ds, tokenizer, quantizer, True, config
+                )
             )
-            val.append(Vikhr4oDatasetBase(val_ds, tokenizer, quantizer, True, config))
+            val.append(
+                Vikhr4oDatasetBase(
+                    val_ds, tokenizer, quantizer, True, config
+                )
+            )
 
         if "tts" in config["tasks"]:
             train.append(
@@ -221,13 +321,23 @@ def load_train_val_splits(
 
     elif "with_description" in dataset:
         if "asr" in config["tasks"]:
+            # train.append(
+            #     Vikhr4oDatasetVoiceDescription(
+            #         train_ds, tokenizer, quantizer, True, config
+            #     )
+            # )
+            # val.append(
+            #     Vikhr4oDatasetVoiceDescription(
+            #         val_ds, tokenizer, quantizer, True, config
+            #     )
+            # )
             train.append(
-                Vikhr4oDatasetVoiceDescription(
+                Vikhr4oDatasetBase(
                     train_ds, tokenizer, quantizer, True, config
                 )
             )
             val.append(
-                Vikhr4oDatasetVoiceDescription(
+                Vikhr4oDatasetBase(
                     val_ds, tokenizer, quantizer, True, config
                 )
             )
@@ -320,7 +430,9 @@ def load_data(
     val_datasets: list[Dataset] = []
 
     for dataset in audio_datasets:
-        train, val = load_train_val_splits(dataset, tokenizer, quantizer, config, few_val_samples=few_val_samples)
+        train, val = load_train_val_splits(
+            dataset, tokenizer, quantizer, config, few_val_samples=few_val_samples
+        )
 
         if config["filter_long_audio"]:
             for split in [train, val]:

@@ -1,5 +1,12 @@
 import os
+
+import torchaudio
 import yaml
+
+import sys
+sys.path.append("BigCodec")
+
+os.environ["HUGGINGFACE_HUB_CACHE"] = "/home/sycheva/Salt/cache"
 
 from dataclasses import dataclass, field
 from typing import Optional
@@ -17,22 +24,25 @@ from transformers import (
     AutoModelForCausalLM,
 )
 
+from BigCodec.vq.codec_decoder import CodecDecoder
+from BigCodec.vq.codec_encoder import CodecEncoder
 from src.compute_metrics import ComputeMetrics
 from src.data import load_data
 from src.tokenizer import AudioTokenizer, get_start_tokens
 from src.utils.training import collate_fn
 
+
 @dataclass
 class SaltTrainingArguments(TrainingArguments):
-
     # Часть параметров переопределяем из конфига
     config: str = field(default="")
 
     output_dir: str = field(default="./results")
 
     # Checkpoints
-    save_strategy: str = field(default="epoch")
-    save_total_limit: Optional[int] = field(default=1)
+    save_strategy: str = field(default="steps")
+    save_steps: int = field(default=3000)
+    save_total_limit: Optional[int] = field(default=3)
 
     # Training
     optim: str = field(default="adamw_torch")
@@ -41,7 +51,7 @@ class SaltTrainingArguments(TrainingArguments):
     # Eval
     include_inputs_for_metrics: bool = field(default=True)
     eval_strategy: str = field(default="steps")
-    eval_steps: int = field(default=1000)
+    eval_steps: int = field(default=3000)
     batch_eval_metrics: bool = field(default=True)
 
     # Metrics and eval
@@ -56,20 +66,36 @@ class SaltTrainingArguments(TrainingArguments):
     remove_unused_columns: bool = field(default=False)
 
 
+class BigCodecTokenizer:
+    def __init__(self, ckpt_path):
+        ckpt = torch.load(ckpt_path, map_location="cpu")
+        encoder = CodecEncoder()
+        encoder.load_state_dict(ckpt["CodecEnc"])
+        self.encoder = encoder.eval().cuda()
+
+        decoder = CodecDecoder()
+        decoder.load_state_dict(ckpt["generator"])
+        self.decoder = decoder.eval().cuda()
+
+    def encode(self, wav):
+        vq_emb = self.encoder(wav.unsqueeze(1))
+        _, vq_code, _ = self.decoder(vq_emb, vq=True)
+        return vq_code
+
 
 def _build_model(training_args, config, new_embeddings_count):
     if checkpoint_path is not None:
         model = AutoModelForCausalLM.from_pretrained(
             checkpoint_path,
             attn_implementation="sdpa",
-            torch_dtype=torch.bfloat16,
+            # torch_dtype=torch.bfloat16,
             cache_dir=path_to_cache,
         )
     else:
         model = AutoModelForCausalLM.from_pretrained(
             base_model,
             attn_implementation="sdpa",
-            torch_dtype=torch.bfloat16,
+            # torch_dtype=torch.bfloat16,
             cache_dir=path_to_cache,
         )
 
@@ -80,7 +106,6 @@ def _build_model(training_args, config, new_embeddings_count):
 
 
 if __name__ == "__main__":
-
     hf_parser = HfArgumentParser(SaltTrainingArguments)
     (training_args,) = hf_parser.parse_args_into_dataclasses()
 
@@ -114,7 +139,9 @@ if __name__ == "__main__":
     training_args.max_grad_norm = float(config["max_grad_norm"])
     training_args.lr_scheduler_type = config["lr_scheduler_type"]
     training_args.warmup_steps = int(config["num_warmup_steps"])
-    training_args.gradient_accumulation_steps = int(config["gradient_accumulation_steps"])
+    training_args.gradient_accumulation_steps = int(
+        config["gradient_accumulation_steps"]
+    )
 
     tokenizer = AutoTokenizer.from_pretrained(base_model, cache_dir=path_to_cache)
 
@@ -131,11 +158,14 @@ if __name__ == "__main__":
     n_tokens = len(tokenizer)
     print("Num non-audio tokens:", n_tokens)
 
-    start_audio_token_id = tokenizer._convert_token_to_id_with_added_voc(start_audio_token)
+    start_audio_token_id = tokenizer._convert_token_to_id_with_added_voc(
+        start_audio_token
+    )
     end_audio_token_id = tokenizer._convert_token_to_id_with_added_voc(end_audio_token)
 
     tokens_config = get_start_tokens(config["quantizer"], n_tokens)
     quantizer = AudioTokenizer(config["quantizer"], tokens_config)
+    print(tokens_config)
 
     codebook_size = (
         config["quantizer"]["speech"]["n_new_tokens"]
@@ -143,16 +173,63 @@ if __name__ == "__main__":
         + config["quantizer"]["bigcodec"]["n_new_tokens"]
     )
     print("New tokens:", codebook_size)
-    train_dataset, val_dataset = load_data(data, tokenizer, quantizer, config, few_val_samples=training_args.few_val_samples)
+    train_dataset, val_dataset = load_data(
+        data,
+        tokenizer,
+        quantizer,
+        config,
+        few_val_samples=training_args.few_val_samples,
+    )
+
+    # from src.utils.decoding import decode_audio_speech, decode_audio_bigcodec
+    # from speechtokenizer import SpeechTokenizer
+    #
+    # config_path = "speech_config.json"
+    # ckpt_path = "SpeechTokenizer.pt"
+    # quantizer = SpeechTokenizer.load_from_checkpoint(config_path, ckpt_path)
+    # quantizer.eval().to("cuda")
+    #
+    # codebook_size = quantizer.quantizer.bins
+    # codes = train_dataset[0]["input_ids"]
+    # # codes = torch.tensor(codes, dtype=torch.float32, device="cuda")
+    # # flattened = codes.t().contiguous().view(1, -1)
+    #
+    # audio, sr = decode_audio_speech(
+    #     codes,
+    #     quantizer,
+    #     n_tokens,
+    #     1,
+    #     start_audio_token_id,
+    #     end_audio_token_id,
+    # )
+    #
+    # torchaudio.save("test-asr.wav", audio, sr)
+    # print(tokenizer.decode(codes))
+    # import pdb ; pdb.set_trace()
+    # bigcodec = BigCodecTokenizer("bigcodec.pt")
+    # audio, sr = decode_audio_bigcodec(
+    #     codes,
+    #     bigcodec,
+    #     n_tokens,
+    #     bigcodec.decoder.quantizer.num_quantizers,
+    #     start_audio_token_id,
+    #     end_audio_token_id,
+    # )
+    # torchaudio.save("test-tts.wav", audio.unsqueeze(0), sr)
+    # print(tokenizer.decode(codes))
+    # import pdb; pdb.set_trace()
 
     new_embeddings_count = n_tokens + codebook_size
-    model = _build_model(training_args, config, new_embeddings_count=new_embeddings_count)
+    model = _build_model(
+        training_args, config, new_embeddings_count=new_embeddings_count
+    )
 
     # Костыль, чтобы не падало из-за отдельного параметра is_asr
     # Он нужен для вычисления метрик
     orig_model_forward = model.forward
+
     def crutch_is_asr(*args, **kwargs):
-        del kwargs['is_asr']
+        del kwargs["is_asr"]
         return orig_model_forward(*args, **kwargs)
 
     model.forward = crutch_is_asr
@@ -161,7 +238,6 @@ if __name__ == "__main__":
         model,
         tokenizer=tokenizer,
         args=training_args,
-
         # Data settings
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
@@ -169,7 +245,7 @@ if __name__ == "__main__":
     )
     trainer.compute_metrics = ComputeMetrics(trainer, config["tasks"])
 
-    trainer.accelerator.log_with = [ 'wandb' ]
+    trainer.accelerator.log_with = ["wandb"]
     trainer.accelerator.init_trackers(
         project_name=config["wandb_project_name"],
     )
