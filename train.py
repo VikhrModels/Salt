@@ -117,7 +117,8 @@ if __name__ == "__main__":
     checkpoint_path = config.get("checkpoint_path")
     save_dir = config["save_dir"]
 
-    data = config["data"]
+    asr_data = config["asr_data"]
+    tts_data = config["tts_data"]
 
     start_audio_token = config["start_audio_token"]
     end_audio_token = config["end_audio_token"]
@@ -174,50 +175,13 @@ if __name__ == "__main__":
     )
     print("New tokens:", codebook_size)
     train_dataset, val_dataset = load_data(
-        data,
+        asr_data,
+        tts_data,
         tokenizer,
         quantizer,
         config,
         few_val_samples=training_args.few_val_samples,
     )
-
-    # from src.utils.decoding import decode_audio_speech, decode_audio_bigcodec
-    # from speechtokenizer import SpeechTokenizer
-    #
-    # config_path = "speech_config.json"
-    # ckpt_path = "SpeechTokenizer.pt"
-    # quantizer = SpeechTokenizer.load_from_checkpoint(config_path, ckpt_path)
-    # quantizer.eval().to("cuda")
-    #
-    # codebook_size = quantizer.quantizer.bins
-    # codes = train_dataset[0]["input_ids"]
-    # # codes = torch.tensor(codes, dtype=torch.float32, device="cuda")
-    # # flattened = codes.t().contiguous().view(1, -1)
-    #
-    # audio, sr = decode_audio_speech(
-    #     codes,
-    #     quantizer,
-    #     n_tokens,
-    #     1,
-    #     start_audio_token_id,
-    #     end_audio_token_id,
-    # )
-    #
-    # torchaudio.save("test-asr.wav", audio, sr)
-    # print(tokenizer.decode(codes))
-    # import pdb ; pdb.set_trace()
-    # bigcodec = BigCodecTokenizer("bigcodec.pt")
-    # audio, sr = decode_audio_bigcodec(
-    #     codes,
-    #     bigcodec,
-    #     n_tokens,
-    #     bigcodec.decoder.quantizer.num_quantizers,
-    #     start_audio_token_id,
-    #     end_audio_token_id,
-    # )
-    # torchaudio.save("test-tts.wav", audio.unsqueeze(0), sr)
-    # print(tokenizer.decode(codes))
-    # import pdb; pdb.set_trace()
 
     new_embeddings_count = n_tokens + codebook_size
     model = _build_model(

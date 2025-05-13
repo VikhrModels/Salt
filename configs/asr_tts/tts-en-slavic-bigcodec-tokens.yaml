@@ -2,6 +2,18 @@ base_model: "Qwen/Qwen2.5-0.5B"
 checkpoint_path: null
 save_dir: "./results"
 
+asr_data:
+  - Vikhrmodels/librispeech_quantized
+  - Vikhrmodels/parler_tts_with_description_quantized
+  - Vikhrmodels/emilia_quantized-v1
+
+tts_data:
+  - ksych/mozilla_slavic_quantized
+  - ksych/audiobooks_quantized
+
+text_data: []
+
+
 start_sequence_token: "<|im_start|>"
 end_sequence_token: "<|im_end|>"
 start_audio_token: "<|start_of_audio|>"
@@ -9,44 +21,61 @@ end_audio_token: "<|end_of_audio|>"
 
 n_special_tokens: 3
 
-data:
-  - ksych/emilia_multilang_quantized
-  - ksych/mozilla_slavic_quantized
-  - ksych/librispeech_quantized
-
-text_data: []
-
 max_seq_length: 4096
-raw_audio_length: 256000
+filter_long_audio: False
 
-path_to_cache: ".."
+path_to_cache: "."
 
 allow_tf32: True
 
-filter_long_audio: False
+# Freezing settings
+freeze:
+    freeze_emb: False
+    freeze_ln: False
+    freeze_attn: False
+    freeze_ff: False
+    freeze_ff_layers:
+      - 5
+      - 6
+      - 7
+      - 8
+      - 9
+      - 12
+      - 23
+      - 14
+      - 18
+      - 19
+      - 20
+      - 0
+      - 25
+
+    freeze_other: False
 
 tasks:
+  - asr
   - tts
 
 # Quantizer settings
 quantizer:
   speech:
-    n_new_tokens: 0
+    n_new_tokens: 1024
   wav:
     n_new_tokens: 0
-  bigcodec: 
+  bigcodec:
     n_new_tokens: 8192
-  asr: []
+  asr:
+    - quantizer: speech
+      n_codebooks: 1
 
   tts:
     - quantizer: bigcodec
       n_codebooks: 1
 
 # Training settings
-train_batch_size: 2
-eval_batch_size: 2
+train_batch_size: 4
+eval_batch_size: 4
 learning_rate: 1e-4
-gradient_accumulation_steps: 4
+gradient_accumulation_steps: 1
 lr_scheduler_type: "cosine"
 num_train_epochs: 5
 num_warmup_steps: 1000
@@ -55,6 +84,7 @@ weight_decay: 0.1
 max_grad_norm: 0.25
 
 torch_compile: False
+save_total_limit: 3
 
 # Logging settings
-wandb_project_name: "vikhr4o-qwen2.5-0.5b"
+wandb_project_name: "asr-tts"

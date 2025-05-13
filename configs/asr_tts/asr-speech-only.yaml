@@ -1,15 +1,13 @@
 base_model: "Qwen/Qwen2.5-0.5B"
-checkpoint_path: "ksych/salt-asr-2"
+checkpoint_path: null
 save_dir: "./results"
 
-data:
+asr_data:
   - Vikhrmodels/librispeech_quantized
-#  - Vikhrmodels/homebrewltd_quantized-v1
-#  - ksych/emilia_multilang_quantized
-#  - ksych/mozilla_slavic_quantized
-#  - ksych/audiobooks_quantized
   - Vikhrmodels/parler_tts_with_description_quantized
   - Vikhrmodels/emilia_quantized-v1
+
+tts_data: []
 
 text_data: []
 

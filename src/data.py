@@ -63,7 +63,14 @@ class Vikhr4oDatasetBase(Dataset):
                 ],
                 dim=1,
             ).squeeze(0)
-            start = self.bos.shape[-1] + self.soa.shape[-1] + audio_input_tokens.shape[-1] + self.eoa.shape[-1]
+
+            start = (
+                self.bos.shape[-1]
+                + self.soa.shape[-1]
+                + audio_input_tokens.shape[-1]
+                + self.eoa.shape[-1]
+            )
+
         else:
             tokens = torch.cat(
                 [
@@ -76,7 +83,10 @@ class Vikhr4oDatasetBase(Dataset):
                 ],
                 dim=1,
             ).squeeze(0)
-            start = self.bos.shape[-1] + self.soa.shape[-1] + text_input_tokens.shape[-1]
+
+            start = (
+                self.bos.shape[-1] + self.soa.shape[-1] + text_input_tokens.shape[-1]
+            )
 
         attention_mask = torch.ones(len(tokens))
         labels = tokens.clone()
@@ -148,8 +158,6 @@ class Vikhr4oDatasetTranscription(Vikhr4oDatasetBase):
         labels = tokens.clone()
 
         if self.asr:
-            # In ASR mode, only text_input_tokens + eos are target
-            # Compute offsets
             start = (
                 self.bos.shape[-1]
                 + prefix.shape[-1]
@@ -160,9 +168,7 @@ class Vikhr4oDatasetTranscription(Vikhr4oDatasetBase):
         else:
             assert False
 
-        # Mask all tokens except the ones we want to supervise
         labels[:start] = -100
-        # labels[end:] = -100
 
         return {
             "input_ids": tokens,
@@ -170,15 +176,6 @@ class Vikhr4oDatasetTranscription(Vikhr4oDatasetBase):
             "labels": labels,
             "is_asr": torch.ones([1]) * self.asr,
         }
-
-        # attention_mask = torch.ones(len(tokens))
-        #
-        # return {
-        #     "input_ids": tokens,
-        #     "attention_mask": attention_mask,
-        #     "labels": tokens.clone(),
-        #     "is_asr": torch.ones([1]) * self.asr,
-        # }
 
 
 def prepare_text_field(row):
@@ -194,7 +191,7 @@ def load_tokenized_data(data_path: str, config, few_val_samples=None):
     if "-wav-" not in data_path:
         wav_path = data_path + "-wav-unify"
 
-    bgicodec_path = data_path
+    bigcodec_path = data_path
     if "bigcodec" not in data_path:
         bigcodec_path = data_path + "-bigcodec"
 
@@ -279,90 +276,38 @@ def load_tokenized_data(data_path: str, config, few_val_samples=None):
 
 
 def load_train_val_splits(
-    dataset: str, tokenizer, quantizer, config, few_val_samples=None
+    dataset: str,
+    tokenizer,
+    quantizer,
+    config,
+    few_val_samples=None,
+    is_asr=True,
 ):
     train_ds, val_ds = load_tokenized_data(
         dataset, config, few_val_samples=few_val_samples
     )
     train, val = [], []
 
-    if (
-        "librispeech" in dataset
-        or "emilia" in dataset
-        or "music" in dataset
-        or "mozilla" in dataset
-        or "audiobooks" in dataset
-    ):
-        if "asr" in config["tasks"] and "mozilla" not in dataset and "audiobooks" not in dataset:
-            # train.append(
-            #     Vikhr4oDatasetTranscription(
-            #         train_ds, tokenizer, quantizer, True, config
-            #     )
-            # )
-            # val.append(
-            #     Vikhr4oDatasetTranscription(val_ds, tokenizer, quantizer, True, config)
-            # )
-            train.append(
-                Vikhr4oDatasetBase(
-                    train_ds, tokenizer, quantizer, True, config
-                )
-            )
-            val.append(
-                Vikhr4oDatasetBase(
-                    val_ds, tokenizer, quantizer, True, config
-                )
-            )
+    print(dataset)
 
-        if "tts" in config["tasks"]:
-            train.append(
-                Vikhr4oDatasetBase(train_ds, tokenizer, quantizer, False, config)
-            )
-            val.append(Vikhr4oDatasetBase(val_ds, tokenizer, quantizer, False, config))
+    if "with_description" in dataset:
+        train.append(Vikhr4oDatasetBase(train_ds, tokenizer, quantizer, is_asr, config))
+        val.append(Vikhr4oDatasetBase(val_ds, tokenizer, quantizer, is_asr, config))
 
-    elif "with_description" in dataset:
-        if "asr" in config["tasks"]:
-            # train.append(
-            #     Vikhr4oDatasetVoiceDescription(
-            #         train_ds, tokenizer, quantizer, True, config
-            #     )
-            # )
-            # val.append(
-            #     Vikhr4oDatasetVoiceDescription(
-            #         val_ds, tokenizer, quantizer, True, config
-            #     )
-            # )
-            train.append(
-                Vikhr4oDatasetBase(
-                    train_ds, tokenizer, quantizer, True, config
-                )
-            )
-            val.append(
-                Vikhr4oDatasetBase(
-                    val_ds, tokenizer, quantizer, True, config
-                )
-            )
-
-        if "tts" in config["tasks"]:
-            train.append(
-                Vikhr4oDatasetVoiceDescription(
-                    train_ds, tokenizer, quantizer, False, config
-                )
-            )
-            val.append(
-                Vikhr4oDatasetVoiceDescription(
-                    val_ds, tokenizer, quantizer, False, config
-                )
-            )
-
-    elif "homebrewltd" in dataset:
-        if "asr" in config["tasks"]:
-            train.append(
-                Vikhr4oDatasetBase(train_ds, tokenizer, quantizer, True, config)
-            )
-            val.append(Vikhr4oDatasetBase(val_ds, tokenizer, quantizer, True, config))
+        # train.append(
+        #     Vikhr4oDatasetVoiceDescription(
+        #         train_ds, tokenizer, quantizer, is_asr, config
+        #     )
+        # )
+        # val.append(
+        #     Vikhr4oDatasetVoiceDescription(
+        #         val_ds, tokenizer, quantizer, is_asr, config
+        #     )
+        # )
 
     else:
-        raise ValueError("Unknown dataset.")
+        train.append(Vikhr4oDatasetBase(train_ds, tokenizer, quantizer, is_asr, config))
+        val.append(Vikhr4oDatasetBase(val_ds, tokenizer, quantizer, is_asr, config))
 
     return train, val
 
@@ -424,14 +369,51 @@ def load_text_dataset(dataset_path: str, tokenizer, max_length: int):
 
 
 def load_data(
-    audio_datasets: list[str], tokenizer, quantizer, config, few_val_samples=None
+    asr_datasets: list[str],
+    tts_datasets: list[str],
+    tokenizer,
+    quantizer,
+    config,
+    few_val_samples=None,
 ) -> tuple[Dataset, Dataset]:
     train_datasets: list[Dataset] = []
     val_datasets: list[Dataset] = []
 
-    for dataset in audio_datasets:
+    print("ASR")
+
+    for dataset in asr_datasets:
         train, val = load_train_val_splits(
-            dataset, tokenizer, quantizer, config, few_val_samples=few_val_samples
+            dataset,
+            tokenizer,
+            quantizer,
+            config,
+            few_val_samples=few_val_samples,
+            is_asr=True,
+        )
+
+        if config["filter_long_audio"]:
+            for split in [train, val]:
+                for dataset in split:
+                    print("Filter out long sequences")
+                    print("Before filtering:", len(dataset))
+                    dataset.dataset = dataset.dataset.filter(
+                        lambda x: len(x["audio_tokens_wav"][0]) < 512
+                    )
+                    print("After filtering:", len(dataset))
+
+        train_datasets.extend(train)
+        val_datasets.extend(val)
+
+    print("TTS")
+
+    for dataset in tts_datasets:
+        train, val = load_train_val_splits(
+            dataset,
+            tokenizer,
+            quantizer,
+            config,
+            few_val_samples=few_val_samples,
+            is_asr=False,
         )
 
         if config["filter_long_audio"]:
