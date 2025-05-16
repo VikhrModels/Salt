@@ -7,7 +7,9 @@ asr_data:
   - Vikhrmodels/parler_tts_with_description_quantized
   - Vikhrmodels/emilia_quantized-v1
 
-tts_data: []
+tts_data:
+  - ksych/mozilla_slavic_quantized
+  - ksych/audiobooks_quantized
 
 text_data: []
 
@@ -22,7 +24,7 @@ n_special_tokens: 3
 max_seq_length: 4096
 filter_long_audio: False
 
-path_to_cache: null
+path_to_cache: "."
 
 allow_tf32: True
 
@@ -51,6 +53,7 @@ freeze:
 
 tasks:
   - asr
+  - tts
 
 # Quantizer settings
 quantizer:
@@ -59,16 +62,18 @@ quantizer:
   wav:
     n_new_tokens: 0
   bigcodec:
-    n_new_tokens: 0
+    n_new_tokens: 8192
   asr:
     - quantizer: speech
       n_codebooks: 1
 
-  tts: []
+  tts:
+    - quantizer: bigcodec
+      n_codebooks: 1
 
 # Training settings
-train_batch_size: 3
-eval_batch_size: 3
+train_batch_size: 4
+eval_batch_size: 4
 learning_rate: 1e-4
 gradient_accumulation_steps: 1
 lr_scheduler_type: "cosine"

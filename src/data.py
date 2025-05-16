@@ -5,7 +5,6 @@ from torch.utils.data import Dataset, ConcatDataset
 
 class Vikhr4oDatasetBase(Dataset):
     def __init__(self, dataset, tokenizer, quantizer, asr: bool, config):
-
         assert dataset is not None
 
         self.dataset = dataset
@@ -64,6 +63,14 @@ class Vikhr4oDatasetBase(Dataset):
                 ],
                 dim=1,
             ).squeeze(0)
+
+            start = (
+                self.bos.shape[-1]
+                + self.soa.shape[-1]
+                + audio_input_tokens.shape[-1]
+                + self.eoa.shape[-1]
+            )
+
         else:
             tokens = torch.cat(
                 [
@@ -77,12 +84,18 @@ class Vikhr4oDatasetBase(Dataset):
                 dim=1,
             ).squeeze(0)
 
+            start = (
+                self.bos.shape[-1] + self.soa.shape[-1] + text_input_tokens.shape[-1]
+            )
+
         attention_mask = torch.ones(len(tokens))
+        labels = tokens.clone()
+        labels[:start] = -100
 
         return {
             "input_ids": tokens,
             "attention_mask": attention_mask,
-            "labels": tokens.clone(),
+            "labels": labels,
             "is_asr": torch.ones([1]) * self.asr,
         }
 
@@ -101,54 +114,157 @@ class Vikhr4oDatasetVoiceDescription(Vikhr4oDatasetBase):
         return text_tokenized["input_ids"]
 
 
+class Vikhr4oDatasetTranscription(Vikhr4oDatasetBase):
+    def __getitem__(self, idx):
+        row = self.dataset[idx]
+
+        prefix = self.tokenizer("Transcribe the audio: ", return_tensors="pt")[
+            "input_ids"
+        ]
+        text_input_tokens = self.get_text_tokens(row)
+
+        if self.asr:
+            audio_input_tokens = self.quantizer.quantize_asr(row)
+        else:
+            audio_input_tokens = self.quantizer.quantize_tts(row)
+
+        if self.asr:
+            tokens = torch.cat(
+                [
+                    self.bos,
+                    prefix,
+                    self.soa,
+                    audio_input_tokens,
+                    self.eoa,
+                    text_input_tokens,
+                    self.eos,
+                ],
+                dim=1,
+            ).squeeze(0)
+        else:
+            tokens = torch.cat(
+                [
+                    self.bos,
+                    text_input_tokens,
+                    self.soa,
+                    audio_input_tokens,
+                    self.eoa,
+                    self.eos,
+                ],
+                dim=1,
+            ).squeeze(0)
+
+        attention_mask = torch.ones(len(tokens))
+        labels = tokens.clone()
+
+        if self.asr:
+            start = (
+                self.bos.shape[-1]
+                + prefix.shape[-1]
+                + self.soa.shape[-1]
+                + audio_input_tokens.shape[-1]
+                + self.eoa.shape[-1]
+            )
+        else:
+            assert False
+
+        labels[:start] = -100
+
+        return {
+            "input_ids": tokens,
+            "attention_mask": attention_mask,
+            "labels": labels,
+            "is_asr": torch.ones([1]) * self.asr,
+        }
+
+
 def prepare_text_field(row):
     return {"text": row["json"]["text"]}
 
 
-def load_tokenized_data(data_path: str, few_val_samples=None):
-    speech_path = data_path + "-speech"
+def load_tokenized_data(data_path: str, config, few_val_samples=None):
+    speech_path = data_path
+    if "-speech" not in data_path:
+        speech_path = data_path + "-speech"
 
     wav_path = data_path
-    if '-wav-' not in data_path:
+    if "-wav-" not in data_path:
         wav_path = data_path + "-wav-unify"
+
+    bigcodec_path = data_path
+    if "bigcodec" not in data_path:
+        bigcodec_path = data_path + "-bigcodec"
 
     train, val = None, None
 
-    try:
-        speech = load_dataset(speech_path)
-        train_speech, val_speech = speech["train"], speech["validation"]
+    if config["quantizer"]["speech"]["n_new_tokens"]:
+        try:
+            speech = load_dataset(speech_path)
+            train_speech, val_speech = speech["train"], speech["validation"]
 
-        if "text" not in train_speech.column_names:
-            train_speech = train_speech.map(prepare_text_field)
-            val_speech = val_speech.map(prepare_text_field)
+            if "text" not in train_speech.column_names:
+                train_speech = train_speech.map(prepare_text_field)
+                val_speech = val_speech.map(prepare_text_field)
 
-        train = train_speech.rename_column("audio_tokens", "audio_tokens_speech")
-        val = val_speech.rename_column("audio_tokens", "audio_tokens_speech")
+            train = train_speech.rename_column("audio_tokens", "audio_tokens_speech")
+            val = val_speech.rename_column("audio_tokens", "audio_tokens_speech")
 
-    except Exception as e:
-        print(f"No speech data found for {data_path}.: {e}")
+        except Exception as e:
+            print(f"No speech data found for {data_path}: {e}")
 
-    try:
-        wav = load_dataset(wav_path)
-        train_wav, val_wav = wav["train"], wav["validation"]
+    if config["quantizer"]["wav"]["n_new_tokens"]:
+        try:
+            wav = load_dataset(wav_path)
+            train_wav, val_wav = wav["train"], wav["validation"]
 
-        if (
-            "text" not in train_wav.column_names
-            and "text_description" not in train_wav.column_names
-        ):
-            train_wav = train_wav.map(prepare_text_field)
-            val_wav = val_wav.map(prepare_text_field)
+            if (
+                "text" not in train_wav.column_names
+                and "text_description" not in train_wav.column_names
+            ):
+                train_wav = train_wav.map(prepare_text_field)
+                val_wav = val_wav.map(prepare_text_field)
 
-        if train is None:
-            train = train_wav.rename_column("audio_tokens", "audio_tokens_wav")
-            val = val_wav.rename_column("audio_tokens", "audio_tokens_wav")
-        else:
-            train = train.add_column("audio_tokens_wav", train_wav["audio_tokens"])
-            val = val.add_column("audio_tokens_wav", val_wav["audio_tokens"])
+            if train is None:
+                train = train_wav.rename_column("audio_tokens", "audio_tokens_wav")
+                val = val_wav.rename_column("audio_tokens", "audio_tokens_wav")
+            else:
+                train = train.add_column("audio_tokens_wav", train_wav["audio_tokens"])
+                val = val.add_column("audio_tokens_wav", val_wav["audio_tokens"])
 
-    except Exception as e:
-        print(f"No wav data found for {data_path}.: {e}")
-        train_wav, val_wav = None, None
+        except Exception as e:
+            print(f"No wav data found for {data_path}: {e}")
+            train_wav, val_wav = None, None
+
+    if config["quantizer"]["bigcodec"]["n_new_tokens"]:
+        try:
+            bigcodec = load_dataset(bigcodec_path)
+            train_bigcodec, val_bigcodec = bigcodec["train"], bigcodec["validation"]
+
+            if (
+                "text" not in train_bigcodec.column_names
+                and "text_description" not in train_bigcodec.column_names
+            ):
+                train_bigcodec = train_bigcodec.map(prepare_text_field)
+                val_bigcodec = val_bigcodec.map(prepare_text_field)
+
+            if train is None:
+                train = train_bigcodec.rename_column(
+                    "audio_tokens", "audio_tokens_bigcodec"
+                )
+                val = val_bigcodec.rename_column(
+                    "audio_tokens", "audio_tokens_bigcodec"
+                )
+            else:
+                train = train.add_column(
+                    "audio_tokens_bigcodec", train_bigcodec["audio_tokens"]
+                )
+                val = val.add_column(
+                    "audio_tokens_bigcodec", val_bigcodec["audio_tokens"]
+                )
+
+        except Exception as e:
+            print(f"No bigcodec data found for {data_path}: {e}")
+            train_bigcodec, val_wav = None, None
 
     if train is None and val is None:
         raise ValueError(f"No data found for {data_path}.")
@@ -159,57 +275,39 @@ def load_tokenized_data(data_path: str, few_val_samples=None):
     return train, val
 
 
-def load_train_val_splits(dataset: str, tokenizer, quantizer, config, few_val_samples=None):
-    train_ds, val_ds = load_tokenized_data(dataset, few_val_samples=few_val_samples)
+def load_train_val_splits(
+    dataset: str,
+    tokenizer,
+    quantizer,
+    config,
+    few_val_samples=None,
+    is_asr=True,
+):
+    train_ds, val_ds = load_tokenized_data(
+        dataset, config, few_val_samples=few_val_samples
+    )
     train, val = [], []
 
-    if "librispeech" in dataset or "emilia" in dataset or "music" in dataset or "mozilla":
-        if "asr" in config["tasks"] and "ru" not in dataset:
-            train.append(
-                Vikhr4oDatasetBase(train_ds, tokenizer, quantizer, True, config)
-            )
-            val.append(Vikhr4oDatasetBase(val_ds, tokenizer, quantizer, True, config))
+    print(dataset)
 
-        if "tts" in config["tasks"]:
-            train.append(
-                Vikhr4oDatasetBase(train_ds, tokenizer, quantizer, False, config)
-            )
-            val.append(Vikhr4oDatasetBase(val_ds, tokenizer, quantizer, False, config))
+    if "with_description" in dataset:
+        train.append(Vikhr4oDatasetBase(train_ds, tokenizer, quantizer, is_asr, config))
+        val.append(Vikhr4oDatasetBase(val_ds, tokenizer, quantizer, is_asr, config))
 
-    elif "with_description" in dataset:
-        if "asr" in config["tasks"]:
-            train.append(
-                Vikhr4oDatasetVoiceDescription(
-                    train_ds, tokenizer, quantizer, True, config
-                )
-            )
-            val.append(
-                Vikhr4oDatasetVoiceDescription(
-                    val_ds, tokenizer, quantizer, True, config
-                )
-            )
-
-        if "tts" in config["tasks"]:
-            train.append(
-                Vikhr4oDatasetVoiceDescription(
-                    train_ds, tokenizer, quantizer, False, config
-                )
-            )
-            val.append(
-                Vikhr4oDatasetVoiceDescription(
-                    val_ds, tokenizer, quantizer, False, config
-                )
-            )
-
-    elif "homebrewltd" in dataset:
-        if "asr" in config["tasks"]:
-            train.append(
-                Vikhr4oDatasetBase(train_ds, tokenizer, quantizer, True, config)
-            )
-            val.append(Vikhr4oDatasetBase(val_ds, tokenizer, quantizer, True, config))
+        # train.append(
+        #     Vikhr4oDatasetVoiceDescription(
+        #         train_ds, tokenizer, quantizer, is_asr, config
+        #     )
+        # )
+        # val.append(
+        #     Vikhr4oDatasetVoiceDescription(
+        #         val_ds, tokenizer, quantizer, is_asr, config
+        #     )
+        # )
 
     else:
-        raise ValueError("Unknown dataset.")
+        train.append(Vikhr4oDatasetBase(train_ds, tokenizer, quantizer, is_asr, config))
+        val.append(Vikhr4oDatasetBase(val_ds, tokenizer, quantizer, is_asr, config))
 
     return train, val
 
@@ -271,20 +369,62 @@ def load_text_dataset(dataset_path: str, tokenizer, max_length: int):
 
 
 def load_data(
-    audio_datasets: list[str], tokenizer, quantizer, config, few_val_samples=None
+    asr_datasets: list[str],
+    tts_datasets: list[str],
+    tokenizer,
+    quantizer,
+    config,
+    few_val_samples=None,
 ) -> tuple[Dataset, Dataset]:
     train_datasets: list[Dataset] = []
     val_datasets: list[Dataset] = []
 
-    for dataset in audio_datasets:
-        train, val = load_train_val_splits(dataset, tokenizer, quantizer, config, few_val_samples=few_val_samples)
+    print("ASR")
 
-        for split in [train, val]:
-            for dataset in split:
-                print("Filter out long sequences")
-                print("Before filtering:", len(dataset))
-                dataset.dataset = dataset.dataset.filter( lambda x: len(x['audio_tokens_wav']) < 512 )
-                print("After filtering:", len(dataset))
+    for dataset in asr_datasets:
+        train, val = load_train_val_splits(
+            dataset,
+            tokenizer,
+            quantizer,
+            config,
+            few_val_samples=few_val_samples,
+            is_asr=True,
+        )
+
+        if config["filter_long_audio"]:
+            for split in [train, val]:
+                for dataset in split:
+                    print("Filter out long sequences")
+                    print("Before filtering:", len(dataset))
+                    dataset.dataset = dataset.dataset.filter(
+                        lambda x: len(x["audio_tokens_wav"][0]) < 512
+                    )
+                    print("After filtering:", len(dataset))
+
+        train_datasets.extend(train)
+        val_datasets.extend(val)
+
+    print("TTS")
+
+    for dataset in tts_datasets:
+        train, val = load_train_val_splits(
+            dataset,
+            tokenizer,
+            quantizer,
+            config,
+            few_val_samples=few_val_samples,
+            is_asr=False,
+        )
+
+        if config["filter_long_audio"]:
+            for split in [train, val]:
+                for dataset in split:
+                    print("Filter out long sequences")
+                    print("Before filtering:", len(dataset))
+                    dataset.dataset = dataset.dataset.filter(
+                        lambda x: len(x["audio_tokens_wav"][0]) < 512
+                    )
+                    print("After filtering:", len(dataset))
 
         train_datasets.extend(train)
         val_datasets.extend(val)
@@ -295,6 +435,4 @@ def load_data(
             train_datasets.append(train)
             val_datasets.append(val)
 
-
     return ConcatDataset(train_datasets), ConcatDataset(val_datasets)
-

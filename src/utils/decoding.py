@@ -1,5 +1,4 @@
 from typing import Optional
-from audiotools import AudioSignal
 
 import torch
 
@@ -39,11 +38,38 @@ def get_audio_start_end_tokens(
     else:
         end = tokens.shape[-1]
 
-    assert (
-        start < end
-    ), f"Start of audio must be before end. Found: start - {start}, end - {end}"
+    assert start < end, (
+        f"Start of audio must be before end. Found: start - {start}, end - {end}"
+    )
 
     return start, end
+
+
+def decode_audio_bigcodec(
+    tokens,
+    quantizer,
+    n_original_tokens,
+    n_codebooks,
+    start_audio_token_id: Optional[int] = None,
+    end_audio_token_id: Optional[int] = None,
+    device="cuda",
+):
+    # find audio start and end tokens
+    start, end = get_audio_start_end_tokens(
+        tokens, start_audio_token_id, end_audio_token_id
+    )
+
+    # subtract length of original vocabulary -> tokens in range [0, 1024)
+    audio_tokens = tokens[start:end] % n_original_tokens
+    audio_tokens = audio_tokens.reshape(1, -1, 1).to(device)
+    emb = quantizer.decoder.vq2emb(audio_tokens).transpose(1, 2)
+    audio = quantizer.decoder(emb, vq=False).squeeze().detach().cpu()
+
+    del tokens
+    del audio_tokens
+    torch.cuda.empty_cache()
+
+    return audio, 16000
 
 
 def decode_audio_wav(
@@ -75,7 +101,7 @@ def decode_audio_wav(
     del audio_tokens
     torch.cuda.empty_cache()
 
-    return AudioSignal(audio.detach().cpu().numpy(), 24000)
+    return audio.detach().cpu().numpy(), 24000
 
 
 def decode_audio_speech(
@@ -113,7 +139,7 @@ def decode_audio_speech(
     del audio_tokens
     torch.cuda.empty_cache()
 
-    return AudioSignal(audio.detach().cpu().numpy(), quantizer.sample_rate)
+    return audio.detach().cpu(), quantizer.sample_rate
 
 
 def decode_audio_fish(
@@ -150,4 +176,4 @@ def decode_audio_fish(
     del audio_tokens
     torch.cuda.empty_cache()
 
-    return AudioSignal(audio.detach().cpu().numpy(), quantizer.sample_rate)
+    return audio.detach().cpu(), quantizer.sample_rate
