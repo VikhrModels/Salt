@@ -9,6 +9,7 @@ from typing import Any
 
 import sys
 sys.path.append("WavTokenizer")
+sys.path.append("BigCodec")
 
 import numpy as np
 import yaml
@@ -20,7 +21,8 @@ from WavTokenizer.encoder.utils import convert_audio
 from WavTokenizer.decoder.pretrained import WavTokenizer
 
 from src.quantize.wavtokenizer import quantize_wavtokenizer_batch
-from src.tokenizer import BigCodecTokenizer
+from BigCodec.vq.codec_decoder import CodecDecoder
+from BigCodec.vq.codec_encoder import CodecEncoder
 
 from src.utils.data import DATASET_2_LOAD_FUNCTION
 from src.utils.decoding import (
@@ -59,6 +61,21 @@ prepared_data_path = config["prepared_data_path"]
 
 device = "cuda:0"
 
+class BigCodecTokenizer:
+    def __init__(self, ckpt_path):
+        ckpt = torch.load(ckpt_path, map_location="cpu")
+        encoder = CodecEncoder()
+        encoder.load_state_dict(ckpt["CodecEnc"])
+        self.encoder = encoder.eval().cuda()
+
+        decoder = CodecDecoder()
+        decoder.load_state_dict(ckpt["generator"])
+        self.decoder = decoder.eval().cuda()
+
+    def encode(self, wav):
+        vq_emb = self.encoder(wav.unsqueeze(1))
+        _, vq_code, _ = self.decoder(vq_emb, vq=True)
+        return vq_code
 
 def resample(audio: np.ndarray, sr: int, target_sr: int):
     audio = torch.tensor(audio, dtype=torch.float32)
@@ -105,6 +122,7 @@ def quantize_bigcodec_tokenizer(row: dict[str, Any], quantizer: BigCodecTokenize
     audio_data, sample_rate = row["audio"]["array"], row["audio"]["sampling_rate"]
 
     audio = resample(audio_data, sample_rate, 16000)
+    audio = audio.to(device)
     codes = quantizer.encode(audio)
     codes = codes.squeeze(0, 1)
     codes = codes.cpu()
@@ -131,6 +149,7 @@ def quantize_bigcodec_tokenizer_batched(
     ]
 
     audio = torch.stack(padded_audio_tensors, dim=0).squeeze(1)
+    audio = audio.to(device)
 
     codes = quantizer.encode(audio)
     codes = codes.squeeze(0)
@@ -315,7 +334,7 @@ if __name__ == "__main__":
             train_dataset = train_dataset.map(
                 quantize_bigcodec_tokenizer_batched,
                 batched=True,
-                batch_size=2,
+                batch_size=1,
                 fn_kwargs={"quantizer": quantizer},
                 cache_file_name=os.path.join(
                     path_to_cache, f"tokenize_train_bigcodec_{hash_value}"
@@ -324,7 +343,7 @@ if __name__ == "__main__":
             val_dataset = val_dataset.map(
                 quantize_bigcodec_tokenizer_batched,
                 batched=True,
-                batch_size=2,
+                batch_size=1,
                 fn_kwargs={"quantizer": quantizer},
                 cache_file_name=os.path.join(
                     path_to_cache, f"tokenize_val_bigcodec_{hash_value}"

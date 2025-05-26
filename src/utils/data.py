@@ -6,12 +6,12 @@ import re
 from datasets import Audio, Dataset, load_dataset, concatenate_datasets, Value
 
 def remove_accent(example):
-    text = example["text_description"]
+    text = example["prompt"]
     # удаляем всё от "Accent:" до ближайшей точки (включая её) и лишние пробелы
     # если вместо точки логичнее ориентироваться на поле Tone, можно поправить паттерн.
     new_text = re.sub(r"Accent:[^\.]*\.\s*", "", text)
     # на всякий случай обрезаем пробелы по краям
-    example["text_description"] = new_text.strip()
+    example["prompt"] = new_text.strip()
     return example
 
 
@@ -38,8 +38,11 @@ def prapare_tonspeak(cache_dir) -> tuple[Dataset, Dataset]:
 def prapare_tonebooks(cache_dir) -> tuple[Dataset, Dataset]:
     raw = load_dataset("Vikhrmodels/ToneBooks", cache_dir=cache_dir)
     processed = raw.rename_column("text_description", "prompt")
+    processed = processed.rename_column("mp3", "audio")
     processed = processed.map(remove_accent)
-    return processed["train"], processed["validation"]
+    splits = processed["train"].train_test_split(test_size=0.1)
+
+    return splits["train"], splits["test"]
 
 
 def prepare_parler_tts(cache_dir) -> tuple[Dataset, Dataset]:
@@ -306,6 +309,6 @@ DATASET_2_LOAD_FUNCTION = {
     "parler_tts_with_description": prepare_parler_tts_with_description,
     "synthetic": prepare_synthetic,
     "tedlium": prepare_tedlium,
-    "tonspeak": prapare_tonspeak,
+    "tonespeak": prapare_tonspeak,
     "tonebooks": prapare_tonebooks,
 }
