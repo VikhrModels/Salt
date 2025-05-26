@@ -12,6 +12,12 @@ import yaml
 from datasets import DatasetDict
 import torch
 
+import sys
+ROOT = os.path.dirname(os.path.abspath(__file__))
+
+sys.path.insert(0, os.path.join(ROOT, "BigCodec"))
+sys.path.insert(0, os.path.join(ROOT, "WavTokenizer"))
+
 from WavTokenizer.encoder.utils import convert_audio
 from WavTokenizer.decoder.pretrained import WavTokenizer
 from BigCodec.vq.codec_encoder import CodecEncoder

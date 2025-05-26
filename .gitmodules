@@ -1,0 +1,6 @@
+[submodule "BigCodec"]
+	path = BigCodec
+	url = https://github.com/Aria-K-Alethia/BigCodec.git
+[submodule "WavTokenizer"]
+	path = WavTokenizer
+	url = https://github.com/jishengpeng/WavTokenizer.git
