@@ -1,7 +1,4 @@
-import os
 import torch
-import numpy as np
-from typing import Any
 
 from WavTokenizer.encoder.utils import convert_audio
 from WavTokenizer.decoder.pretrained import WavTokenizer
@@ -50,7 +47,7 @@ def test_map_dataset():
     repo_id = "amphion/Emilia-Dataset"
 
     val_dataset = load_dataset(
-        repo_id, data_files=[ f'Emilia/EN/EN-B000000.tar' ],
+        repo_id, data_files=[ 'Emilia/EN/EN-B000000.tar' ],
     )
 
     val_dataset = val_dataset['train'].select(range(10))

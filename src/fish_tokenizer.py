@@ -16,7 +16,7 @@ def load_encoder(checkpoint_path, precision, is_agent=False):
     )
 
     model = model.to(device=device, dtype=precision)
-    print(f"Restored model from checkpoint")
+    print("Restored model from checkpoint")
 
     decode_one_token = decode_one_token_ar_agent if is_agent else decode_one_token_ar
     print("Using DualARTransformer")
