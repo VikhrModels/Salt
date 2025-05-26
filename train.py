@@ -3,8 +3,7 @@ import os
 import torchaudio
 import yaml
 
-import sys
-sys.path.append("BigCodec")
+
 
 os.environ["HUGGINGFACE_HUB_CACHE"] = "/home/sycheva/Salt/cache"
 
@@ -24,8 +23,6 @@ from transformers import (
     AutoModelForCausalLM,
 )
 
-from BigCodec.vq.codec_decoder import CodecDecoder
-from BigCodec.vq.codec_encoder import CodecEncoder
 from src.compute_metrics import ComputeMetrics
 from src.data import load_data
 from src.tokenizer import AudioTokenizer, get_start_tokens
@@ -64,23 +61,6 @@ class SaltTrainingArguments(TrainingArguments):
     dataloader_num_workers: int = field(default=0)
     few_val_samples: int = field(default=128)
     remove_unused_columns: bool = field(default=False)
-
-
-class BigCodecTokenizer:
-    def __init__(self, ckpt_path):
-        ckpt = torch.load(ckpt_path, map_location="cpu")
-        encoder = CodecEncoder()
-        encoder.load_state_dict(ckpt["CodecEnc"])
-        self.encoder = encoder.eval().cuda()
-
-        decoder = CodecDecoder()
-        decoder.load_state_dict(ckpt["generator"])
-        self.decoder = decoder.eval().cuda()
-
-    def encode(self, wav):
-        vq_emb = self.encoder(wav.unsqueeze(1))
-        _, vq_code, _ = self.decoder(vq_emb, vq=True)
-        return vq_code
 
 
 def _build_model(training_args, config, new_embeddings_count):

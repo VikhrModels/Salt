@@ -1,5 +1,12 @@
 import torch
 
+import sys
+
+sys.path.append("../BigCodec")
+
+from BigCodec.vq.codec_decoder import CodecDecoder
+from BigCodec.vq.codec_encoder import CodecEncoder
+
 
 def get_start_tokens(quantizer_config, n_base_tokens):
     asr = quantizer_config["asr"]
@@ -21,6 +28,23 @@ def get_start_tokens(quantizer_config, n_base_tokens):
         n_base_tokens += quantizer_config["speech"]["n_new_tokens"]
 
     return tokens_config
+
+
+class BigCodecTokenizer:
+    def __init__(self, ckpt_path):
+        ckpt = torch.load(ckpt_path, map_location="cpu")
+        encoder = CodecEncoder()
+        encoder.load_state_dict(ckpt["CodecEnc"])
+        self.encoder = encoder.eval().cuda()
+
+        decoder = CodecDecoder()
+        decoder.load_state_dict(ckpt["generator"])
+        self.decoder = decoder.eval().cuda()
+
+    def encode(self, wav):
+        vq_emb = self.encoder(wav.unsqueeze(1))
+        _, vq_code, _ = self.decoder(vq_emb, vq=True)
+        return vq_code
 
 
 class AudioTokenizer:

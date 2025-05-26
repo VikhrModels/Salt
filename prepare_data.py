@@ -2,9 +2,13 @@ import argparse
 import hashlib
 
 import os
+
 from typing import Any
 
-from dotenv import load_dotenv
+#from dotenv import load_dotenv
+
+import sys
+sys.path.append("WavTokenizer")
 
 import numpy as np
 import yaml
@@ -12,18 +16,11 @@ import yaml
 from datasets import DatasetDict
 import torch
 
-import sys
-ROOT = os.path.dirname(os.path.abspath(__file__))
-
-sys.path.insert(0, os.path.join(ROOT, "BigCodec"))
-sys.path.insert(0, os.path.join(ROOT, "WavTokenizer"))
-
 from WavTokenizer.encoder.utils import convert_audio
 from WavTokenizer.decoder.pretrained import WavTokenizer
-from BigCodec.vq.codec_encoder import CodecEncoder
-from BigCodec.vq.codec_decoder import CodecDecoder
 
 from src.quantize.wavtokenizer import quantize_wavtokenizer_batch
+from src.tokenizer import BigCodecTokenizer
 
 from src.utils.data import DATASET_2_LOAD_FUNCTION
 from src.utils.decoding import (
@@ -33,7 +30,7 @@ from src.utils.decoding import (
     decode_audio_bigcodec,
 )
 
-load_dotenv()
+#load_dotenv()
 hf_token = os.getenv("HF_TOKEN")
 
 parser = argparse.ArgumentParser(description="Train a model with configuration.")
@@ -61,23 +58,6 @@ data = config["raw_data"]
 prepared_data_path = config["prepared_data_path"]
 
 device = "cuda:0"
-
-
-class BigCodecTokenizer:
-    def __init__(self, ckpt_path):
-        ckpt = torch.load(ckpt_path, map_location="cpu")
-        encoder = CodecEncoder()
-        encoder.load_state_dict(ckpt["CodecEnc"])
-        self.encoder = encoder.eval().cuda()
-
-        decoder = CodecDecoder()
-        decoder.load_state_dict(ckpt["generator"])
-        self.decoder = decoder.eval().cuda()
-
-    def encode(self, wav):
-        vq_emb = self.encoder(wav.unsqueeze(1))
-        _, vq_code, _ = self.decoder(vq_emb, vq=True)
-        return vq_code
 
 
 def resample(audio: np.ndarray, sr: int, target_sr: int):
