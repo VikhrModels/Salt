@@ -1,8 +1,18 @@
 import os
 import subprocess
 from pathlib import Path
+import re
 
 from datasets import Audio, Dataset, load_dataset, concatenate_datasets, Value
+
+def remove_accent(example):
+    text = example["text_description"]
+    # удаляем всё от "Accent:" до ближайшей точки (включая её) и лишние пробелы
+    # если вместо точки логичнее ориентироваться на поле Tone, можно поправить паттерн.
+    new_text = re.sub(r"Accent:[^\.]*\.\s*", "", text)
+    # на всякий случай обрезаем пробелы по краям
+    example["text_description"] = new_text.strip()
+    return example
 
 
 def prepare_librispeech(cache_dir) -> tuple[Dataset, Dataset]:
@@ -15,6 +25,20 @@ def prepare_librispeech(cache_dir) -> tuple[Dataset, Dataset]:
 def prepare_tedlium(cache_dir) -> tuple[Dataset, Dataset]:
     raw = load_dataset("LIUM/tedlium", "release1", cache_dir=cache_dir)
     processed = raw.remove_columns(["gender"])
+    return processed["train"], processed["validation"]
+
+
+def prapare_tonspeak(cache_dir) -> tuple[Dataset, Dataset]:
+    raw = load_dataset("Vikhrmodels/ToneSpeak", cache_dir=cache_dir)
+    processed = raw.rename_column("text_description", "prompt")
+    processed = processed.map(remove_accent)
+    return processed["train"], processed["validation"]
+
+
+def prapare_tonebooks(cache_dir) -> tuple[Dataset, Dataset]:
+    raw = load_dataset("Vikhrmodels/ToneBooks", cache_dir=cache_dir)
+    processed = raw.rename_column("text_description", "prompt")
+    processed = processed.map(remove_accent)
     return processed["train"], processed["validation"]
 
 
@@ -282,4 +306,6 @@ DATASET_2_LOAD_FUNCTION = {
     "parler_tts_with_description": prepare_parler_tts_with_description,
     "synthetic": prepare_synthetic,
     "tedlium": prepare_tedlium,
+    "tonspeak": prapare_tonspeak,
+    "tonebooks": prapare_tonebooks,
 }
