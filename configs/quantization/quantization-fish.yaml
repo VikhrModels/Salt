@@ -1,8 +1,0 @@
-raw_data: "librispeech"
-prepared_data_path: "librispeech_quantized-fish"
-
-path_to_cache: ".."
-
-quantizer_config_path: "firefly_gan_vq.yaml"
-quantizer_ckpt_path: "../checkpoints/fish-speech-1.5/firefly-gan-vq-fsq-8x1024-21hz-generator.pth"
-quantizer_type: "fish"

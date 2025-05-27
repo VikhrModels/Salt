@@ -28,7 +28,7 @@ def prepare_tedlium(cache_dir) -> tuple[Dataset, Dataset]:
     return processed["train"], processed["validation"]
 
 
-def prapare_tonspeak(cache_dir) -> tuple[Dataset, Dataset]:
+def prapare_tonespeak(cache_dir) -> tuple[Dataset, Dataset]:
     raw = load_dataset("Vikhrmodels/ToneSpeak", cache_dir=cache_dir)
     processed = raw.rename_column("text_description", "prompt")
     processed = processed.map(remove_accent)
@@ -309,6 +309,6 @@ DATASET_2_LOAD_FUNCTION = {
     "parler_tts_with_description": prepare_parler_tts_with_description,
     "synthetic": prepare_synthetic,
     "tedlium": prepare_tedlium,
-    "tonespeak": prapare_tonspeak,
+    "tonespeak": prapare_tonespeak,
     "tonebooks": prapare_tonebooks,
 }

@@ -1,0 +1,23 @@
+tts_data:
+  - Vikhrmodels/ToneBooks_quantized-bigcodec
+  - Vikhrmodels/ToneSpeak_quantized-bigcodec
+  - Vikhrmodels/audiobooks_quantized-bigcodec
+  - Vikhrmodels/mozilla_slavic_quantized-bigcodec
+  - Vikhrmodels/librispeech_quantized-bigcodec
+
+quantizer_params:
+  speech:
+    n_new_tokens: 1024
+  wav:
+    n_new_tokens: 0
+  bigcodec:
+    n_new_tokens: 8192
+  asr: []
+   # - quantizer: bigcodec
+   #   n_codebooks: 1
+
+  tts:
+    - quantizer: bigcodec
+      quantizer_ckpt_path: checkpoints/bigcodec.pt
+      n_codebooks: 1
+
