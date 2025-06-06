@@ -1,1 +1,4 @@
+data: data/tts-ru.yaml
+model: model/qwen2.5-pre-train.yaml
+train: train/default_train.yaml
 

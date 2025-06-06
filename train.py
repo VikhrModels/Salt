@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import yaml
 
@@ -19,6 +20,7 @@ from transformers import (
     HfArgumentParser,
     AutoTokenizer,
     AutoModelForCausalLM,
+    AutoConfig,
 )
 
 from src.compute_metrics import ComputeMetrics
@@ -61,7 +63,7 @@ class SaltTrainingArguments(TrainingArguments):
     remove_unused_columns: bool = field(default=False)
 
 
-def _build_model(training_args, config, new_embeddings_count):
+def _build_model(new_embeddings_count):
     if checkpoint_path is not None:
         model = AutoModelForCausalLM.from_pretrained(
             checkpoint_path,
@@ -69,12 +71,17 @@ def _build_model(training_args, config, new_embeddings_count):
             # torch_dtype=torch.bfloat16,
             cache_dir=path_to_cache,
         )
-    else:
+    elif base_model is not None:
         model = AutoModelForCausalLM.from_pretrained(
             base_model,
             attn_implementation="sdpa",
             # torch_dtype=torch.bfloat16,
             cache_dir=path_to_cache,
+        )
+    else:
+        config = AutoConfig.from_pretrained(config_path)
+        model = AutoModelForCausalLM.from_config(
+            config=config, attn_implementation="sdpa", cache_dir=path_to_cache
         )
 
     model.config.use_cache = False
@@ -83,15 +90,30 @@ def _build_model(training_args, config, new_embeddings_count):
     return model
 
 
+def load_config(path_to_config):
+    path_to_config = Path(path_to_config)
+    with open(path_to_config, "r") as file:
+        root_config = yaml.safe_load(file)
+
+    config = {}
+    for path in root_config.values():
+        path = path_to_config.with_suffix(path)
+        with open(path, "r") as file:
+            tmp = yaml.safe_load(file)
+        config.update(tmp)
+
+    return config
+
+
 if __name__ == "__main__":
     hf_parser = HfArgumentParser(SaltTrainingArguments)
     (training_args,) = hf_parser.parse_args_into_dataclasses()
 
     # Load config
-    with open(training_args.config, "r") as file:
-        config = yaml.safe_load(file)
+    config = load_config(training_args.config)
 
     base_model = config["base_model"]
+    config_path = config["config_path"]
     checkpoint_path = config.get("checkpoint_path")
     save_dir = config["save_dir"]
 
