@@ -144,7 +144,10 @@ if __name__ == "__main__":
         config["gradient_accumulation_steps"]
     )
 
-    tokenizer = AutoTokenizer.from_pretrained(base_model, cache_dir=path_to_cache)
+    if base_model is not None:
+        tokenizer = AutoTokenizer.from_pretrained(base_model, cache_dir=path_to_cache)
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(config_path, cache_dir=path_to_cache)
 
     if tokenizer.pad_token is None:
         tokenizer.add_special_tokens(
@@ -185,7 +188,7 @@ if __name__ == "__main__":
 
     new_embeddings_count = n_tokens + codebook_size
     model = _build_model(
-        training_args, config, new_embeddings_count=new_embeddings_count
+        new_embeddings_count=new_embeddings_count
     )
 
     # Костыль, чтобы не падало из-за отдельного параметра is_asr
