@@ -6,7 +6,7 @@ import yaml
 import sys
 sys.path.append("BigCodec")
 
-os.environ["HUGGINGFACE_HUB_CACHE"] = "/home/sycheva/Salt/cache"
+#os.environ["HUGGINGFACE_HUB_CACHE"] = "/home/sycheva/Salt/cache"
 
 from dataclasses import dataclass, field
 from typing import Optional
