@@ -1,4 +1,4 @@
-base_model: "Qwen/Qwen3-Embedding-0.6B"
+base_model: "Qwen/Qwen3-0.6B-Base"
 #checkpoint_path: "./results/checkpoint-657000"
 save_dir: "./experiments_results"
 
@@ -9,10 +9,10 @@ asr_data: []
 
 tts_data:
   - Vikhrmodels/ToneSpeak_quantized-bigcodec
-  - Vikhrmodels/audiobooks_quantized-bigcodec
+  - Vikhrmodels/ToneBooks_quantized-bigcodec
   - Vikhrmodels/mozilla_slavic_quantized-bigcodec
   - Vikhrmodels/librispeech_quantized-bigcodec
-  - Vikhrmodels/ToneBooks_quantized-bigcodec
+  
 
 text_data: []
 
@@ -77,11 +77,11 @@ quantizer:
 # Training settings
 train_batch_size: 1
 eval_batch_size: 2
-learning_rate: 2e-4
+learning_rate: 3e-4
 gradient_accumulation_steps: 1
 lr_scheduler_type: "cosine"
 num_train_epochs: 7
-num_warmup_steps: 1000
+num_warmup_steps: 3000
 
 weight_decay: 0.1
 max_grad_norm: 0.25
