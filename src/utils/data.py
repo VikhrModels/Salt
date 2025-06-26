@@ -5,12 +5,10 @@ import re
 
 from datasets import Audio, Dataset, load_dataset, concatenate_datasets, Value
 
+
 def remove_accent(example):
     text = example["prompt"]
-    # удаляем всё от "Accent:" до ближайшей точки (включая её) и лишние пробелы
-    # если вместо точки логичнее ориентироваться на поле Tone, можно поправить паттерн.
     new_text = re.sub(r"Accent:[^\.]*\.\s*", "", text)
-    # на всякий случай обрезаем пробелы по краям
     example["prompt"] = new_text.strip()
     return example
 
@@ -41,18 +39,23 @@ def prapare_tonebooks(cache_dir) -> tuple[Dataset, Dataset]:
     processed = processed.map(remove_accent)
     return processed["train"], processed["validation"]
 
+
 def prepare_tonebooksplus(cache_dir) -> tuple[Dataset, Dataset]:
-    processed = load_dataset("Vikhrmodels/ToneBooksPlus", cache_dir=cache_dir, num_proc=8)
+    processed = load_dataset(
+        "Vikhrmodels/ToneBooksPlus", cache_dir=cache_dir, num_proc=8
+    )
     return processed["train"], processed["validation"]
-    
+
 
 def prepare_toneslavic(cache_dir) -> tuple[Dataset, Dataset]:
     processed = load_dataset("Vikhrmodels/ToneSlavic", cache_dir=cache_dir)
     return processed["train"], processed["validation"]
 
-    
+
 def prepare_tonewebinars(cache_dir) -> tuple[Dataset, Dataset]:
-    processed = load_dataset("Vikhrmodels/ToneWebinars", cache_dir=cache_dir, num_proc=16)
+    processed = load_dataset(
+        "Vikhrmodels/ToneWebinars", cache_dir=cache_dir, num_proc=16
+    )
     return processed["train"], processed["validation"]
 
 
@@ -330,5 +333,5 @@ DATASET_2_LOAD_FUNCTION = {
     "toneslavic": prepare_toneslavic,
     "tonewebinars": prepare_tonewebinars,
     "toneruls": prepare_toneruls,
-    "tonebooksplus": prepare_tonebooksplus
+    "tonebooksplus": prepare_tonebooksplus,
 }

@@ -167,3 +167,4 @@ cache
 wandb/
 results/
 configs/cryri/
+.ruff_cache/

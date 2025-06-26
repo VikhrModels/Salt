@@ -1,0 +1,3 @@
+[submodule "BigCodec"]
+	path = BigCodec
+	url = https://github.com/Aria-K-Alethia/BigCodec.git
