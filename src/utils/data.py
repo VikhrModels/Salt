@@ -1,8 +1,18 @@
 import os
 import subprocess
 from pathlib import Path
+import re
 
 from datasets import Audio, Dataset, load_dataset, concatenate_datasets, Value
+
+def remove_accent(example):
+    text = example["prompt"]
+    # удаляем всё от "Accent:" до ближайшей точки (включая её) и лишние пробелы
+    # если вместо точки логичнее ориентироваться на поле Tone, можно поправить паттерн.
+    new_text = re.sub(r"Accent:[^\.]*\.\s*", "", text)
+    # на всякий случай обрезаем пробелы по краям
+    example["prompt"] = new_text.strip()
+    return example
 
 
 def prepare_librispeech(cache_dir) -> tuple[Dataset, Dataset]:
@@ -15,6 +25,39 @@ def prepare_librispeech(cache_dir) -> tuple[Dataset, Dataset]:
 def prepare_tedlium(cache_dir) -> tuple[Dataset, Dataset]:
     raw = load_dataset("LIUM/tedlium", "release1", cache_dir=cache_dir)
     processed = raw.remove_columns(["gender"])
+    return processed["train"], processed["validation"]
+
+
+def prapare_tonespeak(cache_dir) -> tuple[Dataset, Dataset]:
+    raw = load_dataset("Vikhrmodels/ToneSpeak", cache_dir=cache_dir)
+    processed = raw.rename_column("text_description", "prompt")
+    processed = processed.map(remove_accent)
+    return processed["train"], processed["validation"]
+
+
+def prapare_tonebooks(cache_dir) -> tuple[Dataset, Dataset]:
+    raw = load_dataset("Vikhrmodels/ToneBooks", cache_dir=cache_dir)
+    processed = raw.rename_column("text_description", "prompt")
+    processed = processed.map(remove_accent)
+    return processed["train"], processed["validation"]
+
+def prepare_tonebooksplus(cache_dir) -> tuple[Dataset, Dataset]:
+    processed = load_dataset("Vikhrmodels/ToneBooksPlus", cache_dir=cache_dir, num_proc=8)
+    return processed["train"], processed["validation"]
+    
+
+def prepare_toneslavic(cache_dir) -> tuple[Dataset, Dataset]:
+    processed = load_dataset("Vikhrmodels/ToneSlavic", cache_dir=cache_dir)
+    return processed["train"], processed["validation"]
+
+    
+def prepare_tonewebinars(cache_dir) -> tuple[Dataset, Dataset]:
+    processed = load_dataset("Vikhrmodels/ToneWebinars", cache_dir=cache_dir, num_proc=16)
+    return processed["train"], processed["validation"]
+
+
+def prepare_toneruls(cache_dir) -> tuple[Dataset, Dataset]:
+    processed = load_dataset("Vikhrmodels/ToneRuLS", cache_dir=cache_dir, num_proc=8)
     return processed["train"], processed["validation"]
 
 
@@ -282,4 +325,10 @@ DATASET_2_LOAD_FUNCTION = {
     "parler_tts_with_description": prepare_parler_tts_with_description,
     "synthetic": prepare_synthetic,
     "tedlium": prepare_tedlium,
+    "tonespeak": prapare_tonespeak,
+    "tonebooks": prapare_tonebooks,
+    "toneslavic": prepare_toneslavic,
+    "tonewebinars": prepare_tonewebinars,
+    "toneruls": prepare_toneruls,
+    "tonebooksplus": prepare_tonebooksplus
 }

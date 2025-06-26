@@ -2,9 +2,16 @@ import argparse
 import hashlib
 
 import os
-from typing import Any
 
-from dotenv import load_dotenv
+from typing import Any
+import soundfile as sf
+
+# from dotenv import load_dotenv
+
+import sys
+
+sys.path.append("WavTokenizer")
+sys.path.append("BigCodec")
 
 import numpy as np
 import yaml
@@ -14,10 +21,10 @@ import torch
 
 from WavTokenizer.encoder.utils import convert_audio
 from WavTokenizer.decoder.pretrained import WavTokenizer
-from BigCodec.vq.codec_encoder import CodecEncoder
-from BigCodec.vq.codec_decoder import CodecDecoder
 
 from src.quantize.wavtokenizer import quantize_wavtokenizer_batch
+from BigCodec.vq.codec_decoder import CodecDecoder
+from BigCodec.vq.codec_encoder import CodecEncoder
 
 from src.utils.data import DATASET_2_LOAD_FUNCTION
 from src.utils.decoding import (
@@ -27,7 +34,11 @@ from src.utils.decoding import (
     decode_audio_bigcodec,
 )
 
-load_dotenv()
+import torch
+import math
+from scipy.signal import resample_poly
+
+# load_dotenv()
 hf_token = os.getenv("HF_TOKEN")
 
 parser = argparse.ArgumentParser(description="Train a model with configuration.")
@@ -57,6 +68,15 @@ prepared_data_path = config["prepared_data_path"]
 device = "cuda:0"
 
 
+def filter_long_audio(examples):
+    result_list = []
+    for example in examples["audio"]:
+        is_ok = example["array"].shape[-1] < example["sampling_rate"] * 15
+        result_list.append(is_ok)
+
+    return result_list
+
+
 class BigCodecTokenizer:
     def __init__(self, ckpt_path):
         ckpt = torch.load(ckpt_path, map_location="cpu")
@@ -74,15 +94,41 @@ class BigCodecTokenizer:
         return vq_code
 
 
-def resample(audio: np.ndarray, sr: int, target_sr: int):
-    audio = torch.tensor(audio, dtype=torch.float32)
-    audio = audio.unsqueeze(0)
+def resample(audio: np.ndarray, sr: int, target_sr: int) -> torch.Tensor:
+    """
+    Меняет частоту дискретизации numpy-массива audio (диапазон –1…+1)
+    с sr → target_sr и возвращает torch.Tensor формы [1, samples] (моно)
+    или [1, channels, samples] (многоканал).
+    """
+    # 1) В float32 для точности
+    audio_f = audio.astype(np.float32)
 
-    if sr != target_sr:
-        # 1 as last arg corresponds to mono audio
-        audio = convert_audio(audio, sr, target_sr, 1)
+    # 2) Если частота не меняется — сразу в тензор
+    if sr == target_sr:
+        t = torch.from_numpy(audio_f)
+        # если моно: [1, N], если stereo: [1, C, N]
+        if t.ndim == 1:
+            return t.unsqueeze(0)
+        else:
+            return t.T.unsqueeze(0)
 
-    return audio
+    # 3) Готовим коэфы up/down через НОД
+    g = math.gcd(sr, target_sr)
+    up, down = target_sr // g, sr // g
+
+    # 4) Ресэмплинг с антиалиасингом
+    if audio_f.ndim == 1:
+        out = resample_poly(audio_f, up, down)
+        tensor = torch.from_numpy(out).unsqueeze(0)  # [1, N']
+    else:
+        # data shape (N, C) → stack → (N', C)
+        chans = [
+            resample_poly(audio_f[:, ch], up, down) for ch in range(audio_f.shape[1])
+        ]
+        out = np.stack(chans, axis=1)  # (N', C)
+        tensor = torch.from_numpy(out.T).unsqueeze(0)  # [1, C, N']
+
+    return tensor
 
 
 def quantize_speechtokenizer(row: dict[str, Any], quantizer):
@@ -104,7 +150,7 @@ def quantize_speechtokenizer(row: dict[str, Any], quantizer):
 def quantize_wavtokenizer(row: dict[str, Any], quantizer):
     audio_data, sample_rate = row["audio"]["array"], int(row["audio"]["sampling_rate"])
 
-    audio = resample(audio_data, sample_rate, 24000)
+    audio = resample(audio_data, sample_rate, 16000)
     bandwidth_id = torch.tensor([0])
 
     audio = audio.to(quantizer.head.out.weight.device)
@@ -119,6 +165,7 @@ def quantize_bigcodec_tokenizer(row: dict[str, Any], quantizer: BigCodecTokenize
     audio_data, sample_rate = row["audio"]["array"], row["audio"]["sampling_rate"]
 
     audio = resample(audio_data, sample_rate, 16000)
+    audio = audio.to(device)
     codes = quantizer.encode(audio)
     codes = codes.squeeze(0, 1)
     codes = codes.cpu()
@@ -136,6 +183,7 @@ def quantize_bigcodec_tokenizer_batched(
         audio_arrays.append(resampled)
 
     max_length = max(array.shape[1] for array in audio_arrays)
+    # max_length = sample_rate * 10
 
     padded_audio_tensors = [
         torch.nn.functional.pad(
@@ -145,6 +193,7 @@ def quantize_bigcodec_tokenizer_batched(
     ]
 
     audio = torch.stack(padded_audio_tensors, dim=0).squeeze(1)
+    audio = audio.to(device)
 
     codes = quantizer.encode(audio)
     codes = codes.squeeze(0)
@@ -222,7 +271,19 @@ def verify_decoding(example, quantizer, quantizer_type: str):
     else:
         raise ValueError("Unknown tokenize type.")
 
-    audio.write(f"test_quantization_{quantizer_type}.wav")
+    print(audio)
+
+    waveform, sample_rate = audio
+    waveform = waveform.squeeze(0)
+    wave_np = waveform.detach().cpu().numpy()
+
+    if wave_np.ndim == 2 and wave_np.shape[0] < wave_np.shape[1]:
+        wave_np = wave_np.T
+
+    out_path = f"test_quantization_{quantizer_type}.wav"
+    sf.write(out_path, wave_np, sample_rate)
+
+    print(f"✅ Аудио сохранено в «{out_path}» при {sample_rate} Гц")
 
 
 if __name__ == "__main__":
@@ -285,14 +346,6 @@ if __name__ == "__main__":
         elif quantizer_type == "wav":
             print("Using wav tokenizer.")
 
-            def filter_long_audio(examples):
-                result_list = []
-                for example in examples["audio"]:
-                    is_ok = example["array"].shape[-1] < example["sampling_rate"] * 10
-                    result_list.append(is_ok)
-
-                return result_list
-
             # from multiprocess import set_start_method
             # set_start_method("spawn")
 
@@ -326,6 +379,15 @@ if __name__ == "__main__":
             )
         elif quantizer_type == "big-codec":
             print("Using BigCodec tokenizer.")
+
+            train_dataset = train_dataset.filter(
+                filter_long_audio, batched=True, keep_in_memory=True, num_proc=4
+            )
+
+            val_dataset = val_dataset.filter(
+                filter_long_audio, batched=True, keep_in_memory=True, num_proc=4
+            )
+
             train_dataset = train_dataset.map(
                 quantize_bigcodec_tokenizer_batched,
                 batched=True,
@@ -374,5 +436,8 @@ if __name__ == "__main__":
         )
 
         dataset.push_to_hub(
-            "Vikhrmodels/" + prepared_data_path, private=True, token=hf_token
+            "Vikhrmodels/" + prepared_data_path,
+            private=False,
+            token=hf_token,
+            max_shard_size="2GB",
         )
