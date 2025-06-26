@@ -1,6 +1,6 @@
 base_model: "Qwen/Qwen3-0.6B-Base"
 #checkpoint_path: "./results/checkpoint-657000"
-save_dir: "./experiments_results"
+save_dir: "./results"
 
 asr_data: []
   # - Vikhrmodels/librispeech_quantized-bigcodec
@@ -8,10 +8,12 @@ asr_data: []
   # - Vikhrmodels/emilia_quantized-v1
 
 tts_data:
+  - Vikhrmodels/ToneSlavic_quantized-bigcodec
+  - Vikhrmodels/ToneWebinars_quantized-bigcodec
+  - Vikhrmodels/ToneBooksPlus_quantized-bigcodec
   - Vikhrmodels/ToneSpeak_quantized-bigcodec
-  - Vikhrmodels/ToneBooks_quantized-bigcodec
-  - Vikhrmodels/mozilla_slavic_quantized-bigcodec
-  - Vikhrmodels/librispeech_quantized-bigcodec
+  - Vikhrmodels/ToneRuLS_quantized-bigcodec
+
   
 
 text_data: []
@@ -75,12 +77,12 @@ quantizer:
       n_codebooks: 1
 
 # Training settings
-train_batch_size: 1
+train_batch_size: 2
 eval_batch_size: 2
 learning_rate: 3e-4
 gradient_accumulation_steps: 1
 lr_scheduler_type: "cosine"
-num_train_epochs: 7
+num_train_epochs: 10
 num_warmup_steps: 3000
 
 weight_decay: 0.1

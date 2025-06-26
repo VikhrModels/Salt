@@ -10,7 +10,6 @@ sys.path.append("BigCodec")
 from dataclasses import dataclass, field
 from typing import Optional
 
-from dotenv import load_dotenv
 import wandb
 
 import torch
@@ -114,7 +113,6 @@ if __name__ == "__main__":
 
     base_model = config["base_model"]
     checkpoint_path = config.get("checkpoint_path")
-    save_dir = config["save_dir"]
 
     asr_data = config["asr_data"]
     tts_data = config["tts_data"]
@@ -126,9 +124,6 @@ if __name__ == "__main__":
 
     torch.backends.cuda.matmul.allow_tf32 = config["allow_tf32"]
     torch.backends.cudnn.allow_tf32 = config["allow_tf32"]
-
-    load_dotenv()
-    wandb.login(key=os.getenv("WB_KEY"))
 
     training_args.per_device_train_batch_size = config["train_batch_size"]
     training_args.per_device_eval_batch_size = config["eval_batch_size"]
@@ -142,6 +137,8 @@ if __name__ == "__main__":
     training_args.gradient_accumulation_steps = int(
         config["gradient_accumulation_steps"]
     )
+
+    training_args.output_dir = config["save_dir"]
 
     tokenizer = AutoTokenizer.from_pretrained(base_model, cache_dir=path_to_cache)
 

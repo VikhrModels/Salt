@@ -1,7 +1,7 @@
 raw_data: "librispeech"
 prepared_data_path: "librispeech_quantized-bigcodec"
 
-path_to_cache: null
+path_to_cache: "./cache_home"
 
 quantizer_config_path: null
 quantizer_ckpt_path: checkpoints/bigcodec.pt
