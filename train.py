@@ -1,5 +1,3 @@
-import os
-
 import yaml
 
 import sys
@@ -10,8 +8,6 @@ sys.path.append("BigCodec")
 from dataclasses import dataclass, field
 from typing import Optional
 
-import wandb
-
 import torch
 
 from transformers import (
@@ -20,6 +16,7 @@ from transformers import (
     HfArgumentParser,
     AutoTokenizer,
     AutoModelForCausalLM,
+    AutoConfig,
 )
 
 from BigCodec.vq.codec_decoder import CodecDecoder
@@ -81,7 +78,7 @@ class BigCodecTokenizer:
         return vq_code
 
 
-def _build_model(training_args, config, new_embeddings_count):
+def _build_model(new_embeddings_count):
     if checkpoint_path is not None:
         model = AutoModelForCausalLM.from_pretrained(
             checkpoint_path,
@@ -89,12 +86,18 @@ def _build_model(training_args, config, new_embeddings_count):
             # torch_dtype=torch.bfloat16,
             cache_dir=path_to_cache,
         )
-    else:
+    elif base_model is not None:
         model = AutoModelForCausalLM.from_pretrained(
             base_model,
             attn_implementation="sdpa",
             # torch_dtype=torch.bfloat16,
             cache_dir=path_to_cache,
+        )
+    else:
+        config = AutoConfig.from_pretrained(config_path)
+        model = AutoModelForCausalLM.from_config(
+            config=config,
+            attn_implementation="sdpa",
         )
 
     model.config.use_cache = False
@@ -112,6 +115,7 @@ if __name__ == "__main__":
         config = yaml.safe_load(file)
 
     base_model = config["base_model"]
+    config_path = config["config_path"]
     checkpoint_path = config.get("checkpoint_path")
 
     asr_data = config["asr_data"]
@@ -138,9 +142,10 @@ if __name__ == "__main__":
         config["gradient_accumulation_steps"]
     )
 
-    training_args.output_dir = config["save_dir"]
-
-    tokenizer = AutoTokenizer.from_pretrained(base_model, cache_dir=path_to_cache)
+    if base_model is not None:
+        tokenizer = AutoTokenizer.from_pretrained(base_model, cache_dir=path_to_cache)
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(config_path, cache_dir=path_to_cache)
 
     if tokenizer.pad_token is None:
         tokenizer.add_special_tokens(
@@ -180,9 +185,7 @@ if __name__ == "__main__":
     )
 
     new_embeddings_count = n_tokens + codebook_size
-    model = _build_model(
-        training_args, config, new_embeddings_count=new_embeddings_count
-    )
+    model = _build_model(new_embeddings_count=new_embeddings_count)
 
     # Костыль, чтобы не падало из-за отдельного параметра is_asr
     # Он нужен для вычисления метрик
