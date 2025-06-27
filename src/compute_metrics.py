@@ -11,7 +11,7 @@ class ComputeMetrics:
 
         self._reset_metrics_accumulation()
 
-        self.criterion = nn.CrossEntropyLoss(reduction="sum")
+        self.criterion = nn.CrossEntropyLoss(reduction="mean")
 
     def _reset_metrics_accumulation(self):
         self.asr_samples = 0
@@ -30,12 +30,8 @@ class ComputeMetrics:
         is_asr_mask = (gather_function((inputs["is_asr"])) == 1).bool()
         not_asr_mask = ~is_asr_mask
 
-        attention_mask = gather_function((inputs["attention_mask"]))
-
-        current_asr_tokens = attention_mask[is_asr_mask].sum().item()
-
-        self.asr_samples += current_asr_tokens
-        self.tts_samples += attention_mask.sum().item() - current_asr_tokens
+        self.asr_samples += is_asr_mask.sum().item()
+        self.tts_samples += not_asr_mask.sum().item()
 
         self.asr_loss += self.criterion(
             predictions[is_asr_mask].flatten(0, 1), label_ids[is_asr_mask].flatten(0, 1)

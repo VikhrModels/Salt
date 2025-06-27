@@ -1,0 +1,73 @@
+base_model: null
+config_path: "Qwen/Qwen3-0.6B-Base"
+save_dir: "./experiments_results"
+
+asr_data: []
+
+tts_data:
+  - Vikhrmodels/ToneSpeak_quantized-bigcodec
+  - Vikhrmodels/ToneBooks_quantized-bigcodec
+  - Vikhrmodels/mozilla_slavic_quantized-bigcodec
+  - Vikhrmodels/librispeech_quantized-bigcodec
+
+
+text_data: []
+
+
+start_sequence_token: "<|im_start|>"
+end_sequence_token: "<|im_end|>"
+start_audio_token: "<|start_of_audio|>"
+end_audio_token: "<|end_of_audio|>"
+
+n_special_tokens: 3
+
+max_seq_length: 4096
+filter_long_audio: False
+
+path_to_cache: "./cache_home"
+
+allow_tf32: True
+
+# Freezing settings
+freeze:
+    freeze_emb: False
+    freeze_ln: False
+    freeze_attn: False
+    freeze_ff: False
+    freeze_ff_layers: False
+    freeze_other: False
+
+tasks:
+  - tts
+
+# Quantizer settings
+quantizer:
+  speech:
+    n_new_tokens: 1024
+  wav:
+    n_new_tokens: 0
+  bigcodec:
+    n_new_tokens: 8192
+  asr: []
+
+  tts:
+    - quantizer: bigcodec
+      n_codebooks: 1
+
+# Training settings
+train_batch_size: 1
+eval_batch_size: 2
+learning_rate: 3e-4
+gradient_accumulation_steps: 1
+lr_scheduler_type: "cosine"
+num_train_epochs: 7
+num_warmup_steps: 3000
+
+weight_decay: 0.1
+max_grad_norm: 0.25
+
+torch_compile: False
+save_total_limit: 7
+
+# Logging settings
+wandb_project_name: "asr-tts"
