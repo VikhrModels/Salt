@@ -1,6 +1,8 @@
 from datasets import load_dataset
 import torch
 from torch.utils.data import Dataset, ConcatDataset
+import re
+import unicodedata
 
 
 class Vikhr4oDatasetBase(Dataset):
@@ -182,6 +184,50 @@ def prepare_text_field(row):
     return {"text": row["json"]["text"]}
 
 
+# ----------- статические паттерны -------------
+ALLOWED_PUNCT = r",\.\!\?:;«»\"\'\-\(\)"
+URL_EMAIL = re.compile(r"https?://\S+|www\.\S+|\b\w+@\w+\.\w+\b", re.I)
+EMOJI = re.compile(r"\p{Emoji}", re.UNICODE)
+# скобки, но пропускаем чисто цифровые (1) (2) ...
+META_BRACKETS = re.compile(
+    r"\((?=[^)]*\D).*?\)|"
+    r"\[(?=[^\]]*\D).*?\]|"
+    r"\{(?=[^}]*\D).*?\}|"
+    r"<(?=[^>]*\D).*?>",
+    re.S,
+)
+# аббревиатуры вида X.Y. (кроме п.п.)
+DOT_ABBRS = re.compile(r"\b(?!п\.п\.)(?:[А-ЯЁ]{1,2}\.){2,}", re.I | re.U)
+
+
+def clean_for_tts(text: str) -> str:
+    # 0. NFC
+    text = unicodedata.normalize("NFC", text)
+
+    # 1-4. спец-конструкции
+    text = URL_EMAIL.sub(" ", text)
+    text = META_BRACKETS.sub(" ", text)
+    text = EMOJI.sub(" ", text)
+
+    # 5. стандартные замены
+    text = re.sub(r"[–—−]", "-", text)
+    text = re.sub(r"-{2,}", "-", text)
+    text = re.sub(r"[:;]\-+|…+", " ", text)
+
+    # 6. точечные аббревиатуры (кроме п.п.)
+    text = DOT_ABBRS.sub(" ", text)
+
+    # 7. whitelist-фильтр
+    whitelist_re = rf"[^\p{{IsCyrillic}}\d {ALLOWED_PUNCT}]"
+    text = re.sub(whitelist_re, " ", text)
+
+    # 8. пробелы и дефисы
+    text = re.sub(r"\s*-\s*", " - ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+
+    return text
+
+
 def load_tokenized_data(data_path: str, config, few_val_samples=None):
     speech_path = data_path
     if "-speech" not in data_path:
@@ -294,16 +340,18 @@ def load_train_val_splits(
         train.append(Vikhr4oDatasetBase(train_ds, tokenizer, quantizer, is_asr, config))
         val.append(Vikhr4oDatasetBase(val_ds, tokenizer, quantizer, is_asr, config))
 
-        # train.append(
-        #     Vikhr4oDatasetVoiceDescription(
-        #         train_ds, tokenizer, quantizer, is_asr, config
-        #     )
-        # )
-        # val.append(
-        #     Vikhr4oDatasetVoiceDescription(
-        #         val_ds, tokenizer, quantizer, is_asr, config
-        #     )
-        # )
+    if (
+        "text_description" in train_ds.column_names
+        and "text_description" in val_ds.column_names
+    ):
+        train.append(
+            Vikhr4oDatasetVoiceDescription(
+                train_ds, tokenizer, quantizer, is_asr, config
+            )
+        )
+        val.append(
+            Vikhr4oDatasetVoiceDescription(val_ds, tokenizer, quantizer, is_asr, config)
+        )
 
     else:
         train.append(Vikhr4oDatasetBase(train_ds, tokenizer, quantizer, is_asr, config))

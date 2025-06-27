@@ -10,8 +10,6 @@ sys.path.append("BigCodec")
 from dataclasses import dataclass, field
 from typing import Optional
 
-import wandb
-
 import torch
 
 from transformers import (
