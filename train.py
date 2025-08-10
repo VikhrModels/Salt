@@ -1,217 +1,120 @@
 import os
 
-import torchaudio
-import yaml
+os.environ["UNSLOTH_DISABLE_FAST_GENERATION"] = "1"
 
-import sys
-sys.path.append("BigCodec")
+from unsloth import FastModel
+from transformers import Trainer, TrainingArguments, Qwen2Model
 
-os.environ["HUGGINGFACE_HUB_CACHE"] = "/home/sycheva/Salt/cache"
+from datasets import load_dataset, concatenate_datasets, Audio
 
-from dataclasses import dataclass, field
-from typing import Optional
-
-from dotenv import load_dotenv
-import wandb
+from salt.dataset import SaltDataset
+from salt.modeling import SaltForAudioGeneration
+from salt.utils import salt_collate_fn
 
 import torch
 
-from transformers import (
-    Trainer,
-    TrainingArguments,
-    HfArgumentParser,
-    AutoTokenizer,
-    AutoModelForCausalLM,
+#ds_one = load_dataset("Vikhrmodels/ToneSlavic_quantized-bigcodec")
+ds_two = load_dataset("Vikhrmodels/ToneWebinars_quantized-bigcodec")
+ds_three = load_dataset("Vikhrmodels/ToneBooksPlus_quantized-bigcodec")
+ds_four = load_dataset("Vikhrmodels/ToneSpeak_quantized-bigcodec")
+ds_five = load_dataset("Vikhrmodels/ToneRuLS_quantized-bigcodec")
+
+# Добавляем train split
+train_ds = concatenate_datasets(
+    [
+        #ds_one["train"],
+        ds_two["train"],
+        ds_three["train"],
+        ds_four["train"],
+        ds_five["train"],
+    ]
 )
 
-from BigCodec.vq.codec_decoder import CodecDecoder
-from BigCodec.vq.codec_encoder import CodecEncoder
-from src.compute_metrics import ComputeMetrics
-from src.data import load_data
-from src.tokenizer import AudioTokenizer, get_start_tokens
-from src.utils.training import collate_fn
+val_ds = concatenate_datasets(
+    [
+        #ds_one["validation"].select(range(279)),
+        ds_two["validation"].select(range(279)),
+        ds_three["validation"].select(range(279)),
+        ds_four["validation"].select(range(279)),
+        ds_five["validation"].select(range(279)),
+    ]
+)
 
 
-@dataclass
-class SaltTrainingArguments(TrainingArguments):
-    # Часть параметров переопределяем из конфига
-    config: str = field(default="")
-
-    output_dir: str = field(default="./results")
-
-    # Checkpoints
-    save_strategy: str = field(default="steps")
-    save_steps: int = field(default=3000)
-    save_total_limit: Optional[int] = field(default=3)
-
-    # Training
-    optim: str = field(default="adamw_torch")
-    torch_compile: bool = field(default=True)
-
-    # Eval
-    include_inputs_for_metrics: bool = field(default=True)
-    eval_strategy: str = field(default="steps")
-    eval_steps: int = field(default=3000)
-    batch_eval_metrics: bool = field(default=True)
-
-    # Metrics and eval
-    report_to: str = field(default="wandb")
-    logging_steps: int = field(default=50)
-    batch_eval_metrics: bool = field(default=True)
-
-    # Data
-    dataloader_drop_last: bool = field(default=True)
-    dataloader_num_workers: int = field(default=0)
-    few_val_samples: int = field(default=128)
-    remove_unused_columns: bool = field(default=False)
+train_ds = train_ds.remove_columns(
+    [col for col in train_ds.column_names if col not in ["text", "audio_tokens"]]
+)
+val_ds = val_ds.remove_columns(
+    [col for col in val_ds.column_names if col not in ["text", "audio_tokens"]]
+)
 
 
-class BigCodecTokenizer:
-    def __init__(self, ckpt_path):
-        ckpt = torch.load(ckpt_path, map_location="cpu")
-        encoder = CodecEncoder()
-        encoder.load_state_dict(ckpt["CodecEnc"])
-        self.encoder = encoder.eval().cuda()
+language_model, tokenizer = FastModel.from_pretrained(
+    "Qwen/Qwen2.5-0.5B",
+    max_seq_length=2048,
+    auto_model=Qwen2Model,
+    trust_remote_code=True,
+    full_finetuning=True
 
-        decoder = CodecDecoder()
-        decoder.load_state_dict(ckpt["generator"])
-        self.decoder = decoder.eval().cuda()
-
-    def encode(self, wav):
-        vq_emb = self.encoder(wav.unsqueeze(1))
-        _, vq_code, _ = self.decoder(vq_emb, vq=True)
-        return vq_code
+)
 
 
-def _build_model(training_args, config, new_embeddings_count):
-    if checkpoint_path is not None:
-        model = AutoModelForCausalLM.from_pretrained(
-            checkpoint_path,
-            attn_implementation="sdpa",
-            # torch_dtype=torch.bfloat16,
-            cache_dir=path_to_cache,
-        )
-    else:
-        model = AutoModelForCausalLM.from_pretrained(
-            base_model,
-            attn_implementation="sdpa",
-            # torch_dtype=torch.bfloat16,
-            cache_dir=path_to_cache,
-        )
+ready_train_dataset = SaltDataset(
+    tokenizer=tokenizer,
+    hf_dataset=train_ds,
+    max_audio_tokens=4096,
+    max_text_length=2048,
+)
 
-    model.config.use_cache = False
-    model.resize_token_embeddings(new_embeddings_count)
-
-    return model
+ready_val_dataset = SaltDataset(
+    tokenizer=tokenizer,
+    hf_dataset=val_ds,
+    max_audio_tokens=4096,
+    max_text_length=2048,
+)
 
 
-if __name__ == "__main__":
-    hf_parser = HfArgumentParser(SaltTrainingArguments)
-    (training_args,) = hf_parser.parse_args_into_dataclasses()
+model = SaltForAudioGeneration(
+    language_model=language_model,
+    freeze_text_encoder=True,
+    d_model=768,
+    n_layers=8,
+    n_heads=12,
+    ff_mult=4.0,
+    dropout=0.1,
+    codebook_size=8192,
+    max_audio_len=4096,
+    soft_prompt_len=16,
+    label_smoothing=0.1,
+)
 
-    # Load config
-    with open(training_args.config, "r") as file:
-        config = yaml.safe_load(file)
+args = TrainingArguments(
+    output_dir="tts_bigcodec_qwen_unsloth",
+    per_device_train_batch_size=4,
+    per_device_eval_batch_size=4,
+    gradient_accumulation_steps=2,
+    learning_rate=3e-4,
+    weight_decay=0.01,
+    warmup_ratio=0.06,
+    num_train_epochs=3,
+    bf16=True,  
+    max_grad_norm=1.0,
+    lr_scheduler_type="cosine",
+    logging_steps=50,
+    eval_strategy="steps",
+    eval_steps=1000,
+    save_steps=1000,
+    save_total_limit=2,
+    report_to="wandb",
+)
 
-    base_model = config["base_model"]
-    checkpoint_path = config.get("checkpoint_path")
-    save_dir = config["save_dir"]
 
-    asr_data = config["asr_data"]
-    tts_data = config["tts_data"]
+trainer = Trainer(
+    model=model,
+    args=args,
+    train_dataset=ready_train_dataset,
+    eval_dataset=ready_val_dataset,
+    data_collator=salt_collate_fn,
+)
 
-    start_audio_token = config["start_audio_token"]
-    end_audio_token = config["end_audio_token"]
-
-    path_to_cache = config["path_to_cache"]
-
-    torch.backends.cuda.matmul.allow_tf32 = config["allow_tf32"]
-    torch.backends.cudnn.allow_tf32 = config["allow_tf32"]
-
-    load_dotenv()
-    wandb.login(key=os.getenv("WB_KEY"))
-
-    training_args.per_device_train_batch_size = config["train_batch_size"]
-    training_args.per_device_eval_batch_size = config["eval_batch_size"]
-    training_args.num_train_epochs = config["num_train_epochs"]
-
-    training_args.weight_decay = float(config["weight_decay"])
-    training_args.learning_rate = float(config["learning_rate"])
-    training_args.max_grad_norm = float(config["max_grad_norm"])
-    training_args.lr_scheduler_type = config["lr_scheduler_type"]
-    training_args.warmup_steps = int(config["num_warmup_steps"])
-    training_args.gradient_accumulation_steps = int(
-        config["gradient_accumulation_steps"]
-    )
-
-    tokenizer = AutoTokenizer.from_pretrained(base_model, cache_dir=path_to_cache)
-
-    if tokenizer.pad_token is None:
-        tokenizer.add_special_tokens(
-            {"pad_token": "[PAD]"}
-        )  # '[PAD]' is the new padding token
-        tokenizer.pad_token = "[PAD]"
-        config["n_special_tokens"] += 1
-
-    tokenizer.add_special_tokens(
-        {"additional_special_tokens": [start_audio_token, end_audio_token]}
-    )
-    n_tokens = len(tokenizer)
-    print("Num non-audio tokens:", n_tokens)
-
-    start_audio_token_id = tokenizer._convert_token_to_id_with_added_voc(
-        start_audio_token
-    )
-    end_audio_token_id = tokenizer._convert_token_to_id_with_added_voc(end_audio_token)
-
-    tokens_config = get_start_tokens(config["quantizer"], n_tokens)
-    quantizer = AudioTokenizer(config["quantizer"], tokens_config)
-    print(tokens_config)
-
-    codebook_size = (
-        config["quantizer"]["speech"]["n_new_tokens"]
-        + config["quantizer"]["wav"]["n_new_tokens"]
-        + config["quantizer"]["bigcodec"]["n_new_tokens"]
-    )
-    print("New tokens:", codebook_size)
-    train_dataset, val_dataset = load_data(
-        asr_data,
-        tts_data,
-        tokenizer,
-        quantizer,
-        config,
-        few_val_samples=training_args.few_val_samples,
-    )
-
-    new_embeddings_count = n_tokens + codebook_size
-    model = _build_model(
-        training_args, config, new_embeddings_count=new_embeddings_count
-    )
-
-    # Костыль, чтобы не падало из-за отдельного параметра is_asr
-    # Он нужен для вычисления метрик
-    orig_model_forward = model.forward
-
-    def crutch_is_asr(*args, **kwargs):
-        del kwargs["is_asr"]
-        return orig_model_forward(*args, **kwargs)
-
-    model.forward = crutch_is_asr
-
-    trainer = Trainer(
-        model,
-        tokenizer=tokenizer,
-        args=training_args,
-        # Data settings
-        train_dataset=train_dataset,
-        eval_dataset=val_dataset,
-        data_collator=lambda x: collate_fn(x, tokenizer, config["max_seq_length"]),
-    )
-    trainer.compute_metrics = ComputeMetrics(trainer, config["tasks"])
-
-    trainer.accelerator.log_with = ["wandb"]
-    trainer.accelerator.init_trackers(
-        project_name=config["wandb_project_name"],
-    )
-
-    trainer.train()
+trainer.train()
