@@ -75,7 +75,7 @@ class SaltForAudioGeneration(nn.Module):
             input_ids=input_ids, attention_mask=attention_mask, return_dict=True
         )
         mem = self.llm_projector(out.last_hidden_state)  # (B,S,D)
-        # prepend soft prompt
+        # Тут делается промт без промта
         B = mem.size(0)
         sp = self.soft_prompt.unsqueeze(0).expand(B, -1, -1)  # (B,P,D)
         mem = torch.cat([self.soft_norm(sp), mem], dim=1)  # (B,P+S,D)
@@ -98,9 +98,7 @@ class SaltForAudioGeneration(nn.Module):
         self,
         text_input_ids: torch.Tensor,
         text_attention_mask: Optional[torch.Tensor] = None,
-        audio_input_ids: Optional[
-            torch.Tensor
-        ] = None,  # (B,L_in), BOS optional (we add it if using targets)
+        audio_input_ids: Optional[torch.Tensor] = None,  # (B,L_in), BOS optional
         audio_targets: Optional[torch.Tensor] = None,  # (B,L_tgt): 0..8191 + EOS + PAD
         audio_pad_mask: Optional[
             torch.Tensor
@@ -126,7 +124,6 @@ class SaltForAudioGeneration(nn.Module):
 
         x = self.audio_tok_emb(audio_input_ids)  # (B,L,D)
 
-        # causal mask (L,L)
         causal = torch.full((L, L), float("-inf"), device=x.device)
         causal = torch.triu(causal, diagonal=1)
 
@@ -196,7 +193,6 @@ class SaltForAudioGeneration(nn.Module):
         generated = []
         freq = torch.zeros(B, self.v_total, device=device)
 
-        # per-layer caches
         caches: List[Dict[str, torch.Tensor]] = [
             {"k_self": None, "v_self": None, "k_mem": None, "v_mem": None}
             for _ in self.layers
