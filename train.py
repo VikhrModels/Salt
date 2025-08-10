@@ -13,16 +13,16 @@ from salt.utils import salt_collate_fn
 
 import torch
 
-#ds_one = load_dataset("Vikhrmodels/ToneSlavic_quantized-bigcodec")
+# ds_one = load_dataset("Vikhrmodels/ToneSlavic_quantized-bigcodec")
 ds_two = load_dataset("Vikhrmodels/ToneWebinars_quantized-bigcodec")
 ds_three = load_dataset("Vikhrmodels/ToneBooksPlus_quantized-bigcodec")
 ds_four = load_dataset("Vikhrmodels/ToneSpeak_quantized-bigcodec")
 ds_five = load_dataset("Vikhrmodels/ToneRuLS_quantized-bigcodec")
 
-# Добавляем train split
+
 train_ds = concatenate_datasets(
     [
-        #ds_one["train"],
+        # ds_one["train"],
         ds_two["train"],
         ds_three["train"],
         ds_four["train"],
@@ -32,7 +32,7 @@ train_ds = concatenate_datasets(
 
 val_ds = concatenate_datasets(
     [
-        #ds_one["validation"].select(range(279)),
+        # ds_one["validation"].select(range(279)),
         ds_two["validation"].select(range(279)),
         ds_three["validation"].select(range(279)),
         ds_four["validation"].select(range(279)),
@@ -54,8 +54,7 @@ language_model, tokenizer = FastModel.from_pretrained(
     max_seq_length=2048,
     auto_model=Qwen2Model,
     trust_remote_code=True,
-    full_finetuning=True
-
+    full_finetuning=True,
 )
 
 
@@ -97,7 +96,7 @@ args = TrainingArguments(
     weight_decay=0.01,
     warmup_ratio=0.06,
     num_train_epochs=3,
-    bf16=True,  
+    bf16=True,
     max_grad_norm=1.0,
     lr_scheduler_type="cosine",
     logging_steps=50,
