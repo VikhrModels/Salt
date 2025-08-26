@@ -5,7 +5,11 @@ from torch import nn
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenizer
 
 from salt.tokenization import AudioTokenizerType
-from salt.tokenization.audio_tokenizer import SpeechTokenizerWrapper, WavTokenizerWrapper, BigCodecWrapper
+from salt.tokenization.audio_tokenizer import (
+    SpeechTokenizerWrapper,
+    WavTokenizerWrapper,
+    BigCodecWrapper,
+)
 
 
 def load_model(config: DictConfig):
@@ -45,29 +49,46 @@ def load_audio_tokenizer(config: DictConfig):
 def prepare_tokenizer(config: DictConfig):
     tokenizer = AutoTokenizer.from_pretrained(config.base_model)
     if tokenizer.pad_token is None:
-        tokenizer.add_special_tokens(
-            {"pad_token": "[PAD]"}
-        )
+        tokenizer.add_special_tokens({"pad_token": "[PAD]"})
         tokenizer.pad_token = "[PAD]"
         config.n_special_tokens += 1
 
     tokenizer.add_special_tokens(
-        {"additional_special_tokens": [config.start_audio_token, config.end_audio_token]}
+        {
+            "additional_special_tokens": [
+                config.start_audio_token,
+                config.end_audio_token,
+            ]
+        }
     )
     start_audio_token_id = tokenizer._convert_token_to_id_with_added_voc(
         config.start_audio_token
     )
-    end_audio_token_id = tokenizer._convert_token_to_id_with_added_voc(config.end_audio_token)
+    end_audio_token_id = tokenizer._convert_token_to_id_with_added_voc(
+        config.end_audio_token
+    )
+    bos_token_id = tokenizer._convert_token_to_id_with_added_voc(
+        config.start_sequence_token
+    )
+    eos_token_id = tokenizer._convert_token_to_id_with_added_voc(
+        config.end_sequence_token
+    )
+
     config.start_audio_token_id = start_audio_token_id
     config.end_audio_token_id = end_audio_token_id
+    config.bos_id = bos_token_id
+    config.eos_id = eos_token_id
+
+    config.n_text_tokens = len(tokenizer)
 
     return tokenizer
 
 
-def prepare_model_and_tokenizer(config: DictConfig) -> tuple[nn.Module, PreTrainedTokenizer]:
-    model = load_model(config.training)
-    tokenizer = prepare_tokenizer(config.training)
+def prepare_model_and_tokenizer(
+    config: DictConfig,
+) -> tuple[nn.Module, PreTrainedTokenizer]:
+    model = load_model(config)
+    tokenizer = prepare_tokenizer(config)
 
-    model.resize_token_embeddings(len(tokenizer) + config.tokenizer.n_audio_tokens)
+    model.resize_token_embeddings(len(tokenizer) + config.n_audio_tokens)
     return model, tokenizer
-

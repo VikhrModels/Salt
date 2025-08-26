@@ -1,5 +1,5 @@
 quantizer_config_path: null
-quantizer_ckpt_path: "checkpoints/bigcodec/bigcodec.pt"
+quantizer_ckpt_path: "/home/Ksenia.Sycheva/Projects/Salt/checkpoints/bigcodec/bigcodec.pt"
 quantizer_type: "bigcodec"
 
 n_audio_tokens: 8192

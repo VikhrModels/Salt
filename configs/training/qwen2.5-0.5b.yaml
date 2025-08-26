@@ -1,6 +1,6 @@
 base_model: "Qwen/Qwen2.5-0.5B"
 checkpoint_path: null
-save_dir: "./results"
+output_dir: "./results"
 
 start_sequence_token: "<|im_start|>"
 end_sequence_token: "<|im_end|>"
@@ -51,10 +51,12 @@ lr_scheduler_type: "cosine"
 num_train_epochs: 5
 num_warmup_steps: 1000
 
+torch_dtype: float32
+
 weight_decay: 0.1
 max_grad_norm: 0.25
 
-optim: "adamw-torch" 
+optim: "adamw_torch"
 torch_compile: false
 
 eval_strategy: "steps" 

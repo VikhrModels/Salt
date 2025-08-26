@@ -1,6 +1,9 @@
 import torch
 
-from salt.data.task_datasets import SaltTextToSpeechDataset, SaltSpeechRecognitionDataset
+from salt.data.task_datasets import (
+    SaltTextToSpeechDataset,
+    SaltSpeechRecognitionDataset,
+)
 
 
 class SaltTextToSpeechDatasetWithVoiceDescription(SaltTextToSpeechDataset):
@@ -14,9 +17,11 @@ class SaltTextToSpeechDatasetWithVoiceDescription(SaltTextToSpeechDataset):
         tokens = self.tokenizer(prompt, return_tensors="pt", add_special_tokens=False)
         return torch.cat(
             [
-                self.bos_id, tokens["input_ids"], self.eos_id,
+                self.bos_id,
+                tokens["input_ids"],
+                self.eos_id,
             ],
-            dim=1
+            dim=1,
         )
 
 
@@ -31,7 +36,9 @@ class SaltSpeechRecognitionDatasetWithVoiceDescription(SaltSpeechRecognitionData
         tokens = self.tokenizer(prompt, return_tensors="pt", add_special_tokens=False)
         return torch.cat(
             [
-                self.bos_id, tokens["input_ids"], self.eos_id,
+                self.bos_id,
+                tokens["input_ids"],
+                self.eos_id,
             ],
-            dim=1
+            dim=1,
         )

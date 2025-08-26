@@ -12,17 +12,19 @@ from salt.utils.loading_utils import load_audio_tokenizer
 
 @hydra.main(config_path="configs", config_name="default.yaml")
 def main(config: DictConfig):
-    os.environ["HF_HOME"] = config.training.path_to_cache
+    os.environ["HF_HOME"] = config.path_to_cache
 
     load_dotenv()
     hf_token = os.getenv("HF_TOKEN")
 
-    tokenization_config = config.tokenization
+    tokenization_config = config
     tokenization_config.start_audio_token_id = None
     tokenization_config.end_audio_token_id = None
-    tokenization_config.n_text_tokens = 10_000 # hard coded, no difference when preparing data
+    tokenization_config.n_text_tokens = (
+        10_000  # hard coded, no difference when preparing data
+    )
 
-    quantizer = load_audio_tokenizer(config.tokenization.tokenizer)
+    quantizer = load_audio_tokenizer(config.tokenizer)
     train_dataset, val_dataset = DATASET_2_LOAD_FUNCTION[tokenization_config.raw_data]()
 
     train_dataset = train_dataset.map(quantizer.encode, remove_columns=["audio"])

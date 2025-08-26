@@ -1,6 +1,6 @@
 base_model: "meta-llama/Llama-3.2-3B"
 checkpoint_path: null
-save_dir: "./results"
+output_dir: "./results"
 
 start_audio_token: "<|start_of_audio|>"
 end_audio_token: "<|end_of_audio|>"
@@ -49,10 +49,12 @@ num_warmup_steps: 10
 checkpointing_steps: 3000
 logging_steps: 20
 
+torch_dtype: float32
+
 weight_decay: 0.1
 max_grad_norm: 0.25
 
-optim: "adamw-torch" 
+optim: "adamw_torch"
 torch_compile: false
 
 eval_strategy: "steps" 

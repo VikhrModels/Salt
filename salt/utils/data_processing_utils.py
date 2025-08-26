@@ -34,7 +34,7 @@ def prepare_synthetic() -> tuple[Dataset, Dataset]:
     processed = processed.rename_column("answer", "text")
     splits = processed["train"].train_test_split(test_size=0.1)
 
-    return splits["train"], splits["test"]
+    return splits["train"], splits["validation"]
 
 
 def prepare_parler_tts_with_description() -> tuple[Dataset, Dataset]:
@@ -72,14 +72,14 @@ def prepare_parler_tts_with_description() -> tuple[Dataset, Dataset]:
 
 
 def prepare_homebrewltd() -> tuple[Dataset, Dataset]:
-    dataset = load_dataset(
-        "homebrewltd/instruction-speech-encodec-v1", "default"
-    )["train"]
+    dataset = load_dataset("homebrewltd/instruction-speech-encodec-v1", "default")[
+        "train"
+    ]
 
     dataset = dataset.rename_column("answer", "text")
     splits = dataset.train_test_split(test_size=0.1)
 
-    return splits["train"], splits["test"]
+    return splits["train"], splits["validation"]
 
 
 def prepare_urban_flan() -> tuple[Dataset, Dataset]:
@@ -104,15 +104,13 @@ def prepare_urban_flan() -> tuple[Dataset, Dataset]:
 
     splits = shuffled.train_test_split(test_size=2048, seed=42)
 
-    return splits["train"], splits["test"]
+    return splits["train"], splits["validation"]
 
 
 def _prepare_emilia(file_list, num_samples=None) -> tuple[Dataset, Dataset]:
     repo_id = "amphion/Emilia-Dataset"
 
-    dataset = load_dataset(
-        repo_id, data_files=file_list, num_proc=16
-    )
+    dataset = load_dataset(repo_id, data_files=file_list, num_proc=16)
     subset = dataset.shuffle(seed=42)
 
     if num_samples is not None and num_samples < len(subset["train"]):
@@ -125,7 +123,7 @@ def _prepare_emilia(file_list, num_samples=None) -> tuple[Dataset, Dataset]:
 
     subset = subset.rename_columns({"__key__": "index", "mp3": "audio"})
     splits = subset.train_test_split(test_size=2048, seed=42)
-    return splits["train"], splits["test"]
+    return splits["train"], splits["validation"]
 
 
 def prepare_emilia() -> tuple[Dataset, Dataset]:
@@ -162,9 +160,7 @@ def prepare_emilia_multilang() -> tuple[Dataset, Dataset]:
             ]
         )
 
-    return _prepare_emilia(
-        file_list, num_samples=1_000_000 * len(lang_slugs)
-    )
+    return _prepare_emilia(file_list, num_samples=1_000_000 * len(lang_slugs))
 
 
 def prepare_emilia_full() -> tuple[Dataset, Dataset]:
@@ -247,7 +243,7 @@ def prepare_musiccaps() -> tuple[Dataset, Dataset]:
     )
 
     splits = ds.train_test_split(test_size=0.1, seed=42)
-    return splits["train"], splits["test"]
+    return splits["train"], splits["validation"]
 
 
 def load_mozilla_slavic():

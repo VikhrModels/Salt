@@ -16,6 +16,7 @@ class AudioTokenizer(ABC):
     """
     Abstract base class for audio tokenizer implementations. All audio tokenizers should implement its interface.
     """
+
     def __init__(self, config: DictConfig):
         self.config = config
 
@@ -23,7 +24,7 @@ class AudioTokenizer(ABC):
         self.end_audio_token_id = config.end_audio_token_id
         self.n_text_tokens = config.n_text_tokens
 
-        self.sample_rate = config.tokenizer.sample_rate
+        self.sample_rate = config.sample_rate
 
         self.quantizer = None
         self.device = config.device
@@ -35,17 +36,14 @@ class AudioTokenizer(ABC):
         :param audio_dict: dictionary containing audio array (numpy) and sample rate.
         :return: codes with shape (n_codebooks, compressed_audio_length).
         """
-        audio = audio_dict['array']
+        audio = audio_dict["array"]
         sr = audio_dict["sample_rate"]
-
-        print(audio.shape)
 
         if sr != self.sample_rate:
             audio = resample(audio, audio.shape[-1] * self.sample_rate // sr)
 
         audio = torch.from_numpy(audio).float().to(self.device)
 
-        print(audio.shape)
         return self._encode(audio.unsqueeze(0))
 
     @abstractmethod
@@ -99,9 +97,11 @@ class AudioTokenizer(ABC):
 class SpeechTokenizerWrapper(AudioTokenizer):
     def __init__(self, config: DictConfig):
         super().__init__(config)
-        self.quantizer = SpeechTokenizer.load_from_checkpoint(config.tokenizer.config_path, config.tokenizer.ckpt_path)
+        self.quantizer = SpeechTokenizer.load_from_checkpoint(
+            config.quantizer_config_path, config.quantizer_ckpt_path
+        )
         self.quantizer = self.quantizer.to(self.device)
-        self.n_codebooks = config.tokenizer.n_codebooks
+        self.n_codebooks = config.n_codebooks
 
     def _encode(self, audio: torch.Tensor) -> torch.Tensor:
         audio = audio.unsqueeze(0)
@@ -129,7 +129,9 @@ class WavTokenizerWrapper(AudioTokenizer):
     def __init__(self, config: DictConfig):
         super().__init__(config)
 
-        self.quantizer = WavTokenizer.from_pretrained0802(config.tokenizer.config_path, config.tokenizer.ckpt_path)
+        self.quantizer = WavTokenizer.from_pretrained0802(
+            config.quantizer_config_path, config.quantizer_ckpt_path
+        )
         self.quantizer = self.quantizer.to(self.device)
 
     def _encode(self, audio: torch.Tensor) -> torch.Tensor:
@@ -153,7 +155,7 @@ class BigCodecWrapper(AudioTokenizer):
     def __init__(self, config: DictConfig):
         super().__init__(config)
 
-        ckpt = torch.load(config.tokenizer.ckpt_path, map_location="cpu")
+        ckpt = torch.load(config.quantizer_ckpt_path, map_location="cpu")
         encoder = CodecEncoder()
         encoder.load_state_dict(ckpt["CodecEnc"])
         self.encoder = encoder.eval().to(self.device)
@@ -171,4 +173,3 @@ class BigCodecWrapper(AudioTokenizer):
         audio_tokens = audio_tokens.reshape(1, -1, 1).to(self.device)
         emb = self.decoder.vq2emb(audio_tokens).transpose(1, 2)
         return self.decoder(emb, vq=False).squeeze()
-

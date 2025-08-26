@@ -1,5 +1,13 @@
 defaults:
   - _self_
-  - data@__global__: pretrain
-  - tokenizer@__global__: dataset
+  - data@__global__: asr
+  - tokenization@__global__: dataset
   - training@__global__: qwen2.5-0.5b
+
+start_audio_token_id: null
+end_audio_token_id: null
+bos_id: null
+eos_id: null
+
+n_text_tokens: null
+device: null

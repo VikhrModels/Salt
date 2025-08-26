@@ -10,7 +10,9 @@ def freeze(
     freeze_ln: bool = True,
     freeze_attn: bool = True,
     freeze_ff: bool = True,
-    freeze_ff_layers: Optional[bool] = None,  # None means all or no layers, depending on freeze_ff
+    freeze_ff_layers: Optional[
+        bool
+    ] = None,  # None means all or no layers, depending on freeze_ff
     freeze_other: bool = True,
 ):
     if freeze_ff_layers is not None and not isinstance(freeze_ff_layers, (list, set)):
@@ -103,4 +105,3 @@ def collate_fn(batch: list[dict], tokenizer: PreTrainedTokenizer, max_seq_length
         "attention_mask": attention_masks,
         "labels": labels,
     }
-

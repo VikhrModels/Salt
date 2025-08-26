@@ -9,53 +9,50 @@ from omegaconf import DictConfig
 from transformers import TrainingArguments, Trainer
 
 from salt.utils.data_utils import prepare_data
-from salt.utils.loading_utils import prepare_model_and_tokenizer
+from salt.utils.loading_utils import prepare_model_and_tokenizer, load_audio_tokenizer
 from salt.utils.training_utils import collate_fn
 
 
-@hydra.main(config_path="configs", config_name="default.yaml")
+@hydra.main(config_path="configs", config_name="default")
 def main(config: DictConfig):
-    os.environ["HF_HOME"] = config.training.path_to_cache
-    torch.backends.cuda.matmul.allow_tf32 = config["allow_tf32"]
-    torch.backends.cudnn.allow_tf32 = config["allow_tf32"]
+    if config.path_to_cache is not None:
+        os.environ["HF_HOME"] = config.path_to_cache
+    torch.backends.cuda.matmul.allow_tf32 = config.allow_tf32
+    torch.backends.cudnn.allow_tf32 = config.allow_tf32
 
     load_dotenv()
     wandb.login(key=os.getenv("WB_KEY"))
 
     training_args = TrainingArguments(
-        output_dir=config.training.output_dir,
-
+        output_dir=config.output_dir,
         # Training
-        per_device_train_batch_size=config.training.train_batch_size,
-        per_device_eval_batch_size=config.training.eval_batch_size,
-        num_train_epochs=config.training.num_train_epochs,
-        learning_rate=config.training.learning_rate,
-        weight_decay=config.training.weight_decay,
-        max_grad_norm=config.training.max_grad_norm,
-        lr_scheduler_type=config.training.lr_scheduler_type,
-        warmup_steps=config.training.num_warmup_steps,
-        gradient_accumulation_steps=config.training.gradient_accumulation_steps,
-        optim=config.training.optim,
-        torch_compile=config.training.torch_compile,
-
+        per_device_train_batch_size=config.train_batch_size,
+        per_device_eval_batch_size=config.eval_batch_size,
+        num_train_epochs=config.num_train_epochs,
+        learning_rate=config.learning_rate,
+        weight_decay=config.weight_decay,
+        max_grad_norm=config.max_grad_norm,
+        lr_scheduler_type=config.lr_scheduler_type,
+        warmup_steps=config.num_warmup_steps,
+        gradient_accumulation_steps=config.gradient_accumulation_steps,
+        optim=config.optim,
+        torch_compile=config.torch_compile,
         # Checkpoints
-        save_strategy=config.training.save_strategy,
-        save_steps=config.training.save_steps,
-        save_total_limit=config.training.save_total_limit,
-
+        save_strategy=config.save_strategy,
+        save_steps=config.save_steps,
+        save_total_limit=config.save_total_limit,
         # Eval
-        eval_strategy=config.training.eval_strategy,
-        eval_steps=config.training.eval_steps,
-
+        eval_strategy=config.eval_strategy,
+        eval_steps=config.eval_steps,
         # Logging
         report_to=["wandb"],
         logging_steps=50,
-        run_name=config.training.wandb_project_name,
+        run_name=config.wandb_project_name,
     )
 
     model, tokenizer = prepare_model_and_tokenizer(config)
     train_data, val_data = prepare_data(config, tokenizer)
-    max_seq_length = config.training.max_text_tokens + config.training.max_audio_tokens
+    max_seq_length = config.max_text_tokens + config.max_audio_tokens
 
     trainer = Trainer(
         model,
@@ -68,7 +65,6 @@ def main(config: DictConfig):
     )
 
     trainer.train()
-
 
 
 if __name__ == "__main__":
