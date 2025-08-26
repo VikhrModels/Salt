@@ -1,0 +1,9 @@
+datasets:
+  - path: "Vikhrmodels/ToneBooksPlus_quantized-bigcodec"
+    type: "audio"
+  - path: "Vikhrmodels/ToneBooksPlus_quantized-bigcodec"
+    type: "audio"
+  - path: "mozilla-foundation/common_voice_17_0"
+    type: "text"
+    n_samples: 50_000
+

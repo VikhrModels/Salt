@@ -1,0 +1,8 @@
+defaults:
+  - _self_
+  - tokenizer@__global__: bigcodec
+
+raw_data: "librispeech"
+prepared_data_path: "librispeech_quantized-bigcodec"
+
+path_to_cache: null

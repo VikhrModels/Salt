@@ -1,0 +1,5 @@
+defaults:
+  - _self_
+  - data@__global__: pretrain
+  - tokenizer@__global__: dataset
+  - training@__global__: qwen2.5-0.5b

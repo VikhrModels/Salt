@@ -1,0 +1,7 @@
+quantizer_config_path: "../checkpoints/speech/config.json"
+quantizer_ckpt_path: "../checkpoints/speech/SpeechTokenizer.pt"
+quantizer_type: "speech"
+
+n_audio_tokens: 1024
+n_codebooks: 8
+sample_rate: 16_000

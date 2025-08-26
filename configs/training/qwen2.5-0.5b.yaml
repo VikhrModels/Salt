@@ -1,0 +1,68 @@
+base_model: "Qwen/Qwen2.5-0.5B"
+checkpoint_path: null
+save_dir: "./results"
+
+start_sequence_token: "<|im_start|>"
+end_sequence_token: "<|im_end|>"
+start_audio_token: "<|start_of_audio|>"
+end_audio_token: "<|end_of_audio|>"
+
+n_special_tokens: 3
+
+max_text_tokens: 1024
+max_audio_tokens: 4096
+filter_long_audio: false
+
+path_to_cache: null
+
+allow_tf32: true
+
+
+# Freezing settings
+freeze:
+    freeze_emb: false
+    freeze_ln: false
+    freeze_attn: false
+    freeze_ff: false
+    freeze_ff_layers:
+      - 5
+      - 6
+      - 7
+      - 8
+      - 9
+      - 12
+      - 23
+      - 14
+      - 18
+      - 19
+      - 20
+      - 0
+      - 25
+
+    freeze_other: false
+
+
+# Training settings
+train_batch_size: 4
+eval_batch_size: 4
+learning_rate: 1e-4
+gradient_accumulation_steps: 1
+lr_scheduler_type: "cosine"
+num_train_epochs: 5
+num_warmup_steps: 1000
+
+weight_decay: 0.1
+max_grad_norm: 0.25
+
+optim: "adamw-torch" 
+torch_compile: false
+
+eval_strategy: "steps" 
+eval_steps: 3000
+
+save_total_limit: 3
+save_strategy: "steps"
+save_steps: 3000
+
+# Logging settings
+wandb_project_name: "Salt-Qwe2.5-0.5b"

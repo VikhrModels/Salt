@@ -5,21 +5,21 @@ from pathlib import Path
 from datasets import Audio, Dataset, load_dataset, concatenate_datasets, Value
 
 
-def prepare_librispeech(cache_dir) -> tuple[Dataset, Dataset]:
-    raw = load_dataset("openslr/librispeech_asr", "clean", cache_dir=cache_dir)
+def prepare_librispeech() -> tuple[Dataset, Dataset]:
+    raw = load_dataset("openslr/librispeech_asr", "clean")
     processed = raw.remove_columns(["chapter_id"])
     processed = processed.cast_column("speaker_id", Value("string"))
     return processed["train.100"], processed["validation"]
 
 
-def prepare_tedlium(cache_dir) -> tuple[Dataset, Dataset]:
-    raw = load_dataset("LIUM/tedlium", "release1", cache_dir=cache_dir)
+def prepare_tedlium() -> tuple[Dataset, Dataset]:
+    raw = load_dataset("LIUM/tedlium", "release1")
     processed = raw.remove_columns(["gender"])
     return processed["train"], processed["validation"]
 
 
-def prepare_parler_tts(cache_dir) -> tuple[Dataset, Dataset]:
-    raw_mls = load_dataset("parler-tts/mls_eng", cache_dir=cache_dir)
+def prepare_parler_tts() -> tuple[Dataset, Dataset]:
+    raw_mls = load_dataset("parler-tts/mls_eng")
     processed_mls = raw_mls.remove_columns(
         ["begin_time", "end_time", "speaker_id", "book_id", "audio_duration"]
     )
@@ -28,8 +28,8 @@ def prepare_parler_tts(cache_dir) -> tuple[Dataset, Dataset]:
     return processed_mls["train"], processed_mls["dev"]
 
 
-def prepare_synthetic(cache_dir) -> tuple[Dataset, Dataset]:
-    raw = load_dataset("homebrewltd/instruction-speech-encodec-v1", cache_dir=cache_dir)
+def prepare_synthetic() -> tuple[Dataset, Dataset]:
+    raw = load_dataset("homebrewltd/instruction-speech-encodec-v1")
     processed = raw.remove_columns(["prompt", "length"])
     processed = processed.rename_column("answer", "text")
     splits = processed["train"].train_test_split(test_size=0.1)
@@ -37,15 +37,14 @@ def prepare_synthetic(cache_dir) -> tuple[Dataset, Dataset]:
     return splits["train"], splits["test"]
 
 
-def prepare_parler_tts_with_description(cache_dir) -> tuple[Dataset, Dataset]:
-    audio = load_dataset("parler-tts/libritts_r_filtered", "clean", cache_dir=cache_dir)
+def prepare_parler_tts_with_description() -> tuple[Dataset, Dataset]:
+    audio = load_dataset("parler-tts/libritts_r_filtered", "clean")
     train_audio, val_audio = audio["train.clean.100"], audio["dev.clean"]
 
     columns = ["id", "text", "path", "text_description"]
     raw = load_dataset(
         "parler-tts/libritts-r-filtered-speaker-descriptions",
         "clean",
-        cache_dir=cache_dir,
     )
     processed = raw.remove_columns(
         list(set(raw.column_names["dev.clean"]) - set(columns))
@@ -72,9 +71,9 @@ def prepare_parler_tts_with_description(cache_dir) -> tuple[Dataset, Dataset]:
     return train_text, val_text
 
 
-def prepare_homebrewltd(cache_dir) -> tuple[Dataset, Dataset]:
+def prepare_homebrewltd() -> tuple[Dataset, Dataset]:
     dataset = load_dataset(
-        "homebrewltd/instruction-speech-encodec-v1", "default", cache_dir=cache_dir
+        "homebrewltd/instruction-speech-encodec-v1", "default"
     )["train"]
 
     dataset = dataset.rename_column("answer", "text")
@@ -83,9 +82,9 @@ def prepare_homebrewltd(cache_dir) -> tuple[Dataset, Dataset]:
     return splits["train"], splits["test"]
 
 
-def prepare_urban_flan(cache_dir) -> tuple[Dataset, Dataset]:
+def prepare_urban_flan() -> tuple[Dataset, Dataset]:
     repo_id = "Vikhrmodels/urban_flan_dataset"
-    dataset = load_dataset(repo_id, cache_dir=cache_dir)
+    dataset = load_dataset(repo_id)
 
     shuffled = dataset["train"].shuffle(seed=42)
 
@@ -108,11 +107,11 @@ def prepare_urban_flan(cache_dir) -> tuple[Dataset, Dataset]:
     return splits["train"], splits["test"]
 
 
-def _prepare_emilia(file_list, cache_dir, num_samples=None) -> tuple[Dataset, Dataset]:
+def _prepare_emilia(file_list, num_samples=None) -> tuple[Dataset, Dataset]:
     repo_id = "amphion/Emilia-Dataset"
 
     dataset = load_dataset(
-        repo_id, data_files=file_list, cache_dir=cache_dir, num_proc=16
+        repo_id, data_files=file_list, num_proc=16
     )
     subset = dataset.shuffle(seed=42)
 
@@ -129,13 +128,13 @@ def _prepare_emilia(file_list, cache_dir, num_samples=None) -> tuple[Dataset, Da
     return splits["train"], splits["test"]
 
 
-def prepare_emilia(cache_dir) -> tuple[Dataset, Dataset]:
+def prepare_emilia() -> tuple[Dataset, Dataset]:
     file_list = [f"EN/EN-B{str(i).zfill(6)}.tar" for i in range(200)]
 
-    return _prepare_emilia(file_list, cache_dir, num_samples=1_000_000)
+    return _prepare_emilia(file_list, num_samples=1_000_000)
 
 
-def prepare_emilia_multilang(cache_dir) -> tuple[Dataset, Dataset]:
+def prepare_emilia_multilang() -> tuple[Dataset, Dataset]:
     # max
     # lang_slugs = {
     #     'DE': 90,
@@ -164,13 +163,13 @@ def prepare_emilia_multilang(cache_dir) -> tuple[Dataset, Dataset]:
         )
 
     return _prepare_emilia(
-        file_list, cache_dir, num_samples=1_000_000 * len(lang_slugs)
+        file_list, num_samples=1_000_000 * len(lang_slugs)
     )
 
 
-def prepare_emilia_full(cache_dir) -> tuple[Dataset, Dataset]:
+def prepare_emilia_full() -> tuple[Dataset, Dataset]:
     file_list = None
-    return _prepare_emilia(file_list, cache_dir)
+    return _prepare_emilia(file_list)
 
 
 def download_clip(
@@ -206,7 +205,7 @@ def download_clip(
     return status, "Downloaded"
 
 
-def prepare_musiccaps(cache_dir: str) -> tuple[Dataset, Dataset]:
+def prepare_musiccaps() -> tuple[Dataset, Dataset]:
     ds = load_dataset("google/MusicCaps", split="train")
     sampling_rate = 44100
     limit = None
@@ -251,7 +250,7 @@ def prepare_musiccaps(cache_dir: str) -> tuple[Dataset, Dataset]:
     return splits["train"], splits["test"]
 
 
-def load_mozilla_slavic(cache_dir: str):
+def load_mozilla_slavic():
     # slavic_langs = ["ab", "be", "bg", "cs", "mhr", "mdf", "pl", "ru", "sr", "sk", "sl", "uk"]
     slavic_langs = ["ru", "uk"]
 
