@@ -4,31 +4,38 @@
 
 Vikhr Salt is a multimodal model based on a pre-trained large language model, extended with new audio tokens to handle both TTS (text-to-speech) and ASR (automatic speech recognition) tasks. The model incorporates two variants for encoding audio—Encodec and SpeechTokenizer—and achieves stable training by fine-tuning precision settings. This approach allows Vikhr Salt to leverage pre-existing LLM knowledge while effectively generating and understanding speech, marking a step forward in multimodal learning.
 
-## Model  Authors 
+## Install requirements 
+Clone audio tokenizers' repositories: 
 
-Ksenia Sycheva, Konstantin Korolev, Aleksandr Nikolic
-## Datasets 
-- [TEDLIUM](https://huggingface.co/datasets/LIUM/tedlium)
-- [Librispeech](https://huggingface.co/datasets/openslr/librispeech_asr)
+```
+git clone https://github.com/jishengpeng/WavTokenizer.git
+git clone https://github.com/Aria-K-Alethia/BigCodec.git
 
+echo "/path/to/Salt/WavTokenizer" > "$(poetry env info --path)/lib/pythonX.Y/site-packages/wavtokenizer.pth"
+echo "/path/to/Salt/BigCodec" > "$(poetry env info --path)/lib/pythonX.Y/site-packages/bigcodec.pth"
+
+```
+Setup environment: 
+```
+pip install poetry
+poetry install
+
+```
+Download audio tokenizers checkpoints: 
+[BigCodec](https://github.com/Aria-K-Alethia/BigCodec/tree/main)
+[WavTokenizer](https://huggingface.co/novateur/WavTokenizer-large-unify-40token)
+[SpeechTokenizer](https://huggingface.co/fnlp/SpeechTokenizer/tree/main)
 
 ## How to run
 ### Preparing Data
-To tokenize data run [prepare_data.py](prepare_data.py). Configs for different tokenizers ([SpeechTokenizer](https://github.com/ZhangXInFD/SpeechTokenizer), [WavTokenizer](https://github.com/jishengpeng/WavTokenizer/), [FishTokenizer](https://github.com/fishaudio/fish-speech/)) are available in [this](configs/quantization) folder. 
+Specify dataset and tokenizer in configs/tokenization and run
 ```
-python prepare_data.py --config configs/quantization/<your-tokenizer-config>.yaml
+python prepare_data.py --config_name default.yaml --config_path configs 
 
 ```
 
 ### Training
-It is possible to configure tokenization for TTS and ASR differently:
-- different number of tokens 
-- different tokenizers 
-
-To do that specify type of quantizer and number of codebooks for both tasks. Examples of configs can be found [here](configs/asr_tts).
-Notes:
-1. music/other non-speech data is only supported by [this](configs/quantization/quantization-wav-music.yaml) version of WavTokenizer
-2. WavTokenizer has fixed number of codebooks = 1, for SpeechTokenizer values between 1 and 8 can be chosen 
+Specify training configuration in configs/default.yaml
 
 for single gpu
 ```
@@ -41,3 +48,12 @@ for multi gpu+ds2
 source scripts/run_me_ds2.sh
 
 ```
+
+## Customization
+### Tokenizers 
+BigCodec, WavTokenizer, and SpeechTokenizer are implemented. 
+To add new tokenizer, create new class inheriting from [AudioTokenizer](salt/tokenization/audio_tokenizer.py).
+
+### Datasets
+Supported datasets formats: text only, audio only, tts, asr, instruct (asr/tts). 
+To add new dataset, implement new class inheriting from [SaltDataset](salt/data/base_datasets.py). 
