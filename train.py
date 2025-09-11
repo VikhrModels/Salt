@@ -9,8 +9,12 @@ from omegaconf import DictConfig
 from transformers import TrainingArguments, Trainer
 
 from salt.utils.data_utils import prepare_data
+from salt.utils.debug_utils import verify_audio_from_tokens_reconstruction
 from salt.utils.loading_utils import prepare_model_and_tokenizer, load_audio_tokenizer
-from salt.utils.training_utils import collate_fn
+from salt.utils.training_utils import collate_fn, fix_seed
+
+
+DEBUG = False
 
 
 @hydra.main(config_path="configs", config_name="default")
@@ -19,9 +23,13 @@ def main(config: DictConfig):
         os.environ["HF_HOME"] = config.path_to_cache
     torch.backends.cuda.matmul.allow_tf32 = config.allow_tf32
     torch.backends.cudnn.allow_tf32 = config.allow_tf32
+    torch._dynamo.config.suppress_errors = False
+    torch._inductor.config.debug = True
 
     load_dotenv()
     wandb.login(key=os.getenv("WB_KEY"))
+
+    fix_seed(42)
 
     training_args = TrainingArguments(
         output_dir=config.output_dir,
@@ -53,6 +61,9 @@ def main(config: DictConfig):
     model, tokenizer = prepare_model_and_tokenizer(config)
     train_data, val_data = prepare_data(config, tokenizer)
     max_seq_length = config.max_text_tokens + config.max_audio_tokens
+
+    if DEBUG:
+        verify_audio_from_tokens_reconstruction(config, train_data[0]["input_ids"])
 
     trainer = Trainer(
         model,

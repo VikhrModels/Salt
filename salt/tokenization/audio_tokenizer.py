@@ -89,7 +89,7 @@ class AudioTokenizer(ABC):
         start, end = get_audio_start_end_tokens(
             tokens, self.start_audio_token_id, self.end_audio_token_id
         )
-        audio_tokens = tokens[start:end]
+        audio_tokens = tokens[:, start:end]
         audio_tokens = audio_tokens % self.n_text_tokens
         return self._decode(audio_tokens)
 
