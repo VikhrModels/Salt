@@ -77,7 +77,7 @@ def left_pad_sequence(sequences, padding_value=0, absolute_max_length=768):
     return padded_sequences
 
 
-def collate_fn(batch: list[dict], tokenizer: PreTrainedTokenizer, max_seq_length: int):        
+def collate_fn(batch: list[dict], tokenizer: PreTrainedTokenizer, max_seq_length: int):
     # Truncate sequences to max_seq_length
     truncated_batch = []
     for item in batch:
@@ -108,7 +108,7 @@ def collate_fn(batch: list[dict], tokenizer: PreTrainedTokenizer, max_seq_length
     )
     labels = left_pad_sequence(
         labels, padding_value=-100, absolute_max_length=max_seq_length
-    )  
+    )
 
     return {
         "input_ids": input_ids.long().contiguous(),
