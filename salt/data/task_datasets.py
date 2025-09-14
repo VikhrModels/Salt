@@ -25,11 +25,11 @@ class SaltTextToSpeechDataset(SaltDataset):
         tokens = torch.cat((text_tokens, audio_tokens), dim=1)
         tokens = tokens.squeeze(0)
 
-        audio_start = text_tokens.shape[0]
+        audio_start = text_tokens.shape[-1]
         labels = tokens.clone()
         labels[:audio_start] = -100
 
-        positional_ids = self._get_positional_ids(tokens, audio_tokens)
+        positional_ids = self._get_positional_ids(text_tokens, audio_tokens)
 
         return {
             "input_ids": tokens,
@@ -61,7 +61,7 @@ class SaltSpeechRecognitionDataset(SaltDataset):
         labels = tokens.clone()
         labels[:text_start] = -100
 
-        positional_ids = self._get_positional_ids(tokens, audio_tokens)
+        positional_ids = self._get_positional_ids(text_tokens, audio_tokens)
 
         return {
             "input_ids": tokens,
