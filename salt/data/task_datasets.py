@@ -8,12 +8,14 @@ class SaltTextToSpeechDataset(SaltDataset):
         self, text_tokens: torch.Tensor, audio_tokens: torch.Tensor
     ):
         text_pos_ids = torch.arange(text_tokens.shape[-1])
-        frame_length = audio_tokens.shape[-1] // text_tokens.shape[-1]
-        audio_pos_ids = text_pos_ids.repeat_interleave(frame_length)
-        if audio_tokens.shape[-1] != audio_tokens.shape[-1]:
-            pad_length = audio_tokens.shape[-1] - audio_tokens.shape[-1]
-            padding = torch.ones(pad_length) * text_pos_ids.shape[-1]
-            audio_pos_ids = torch.cat([audio_pos_ids, padding], dim=-1)
+        audio_pos_ids = torch.arange(audio_tokens.shape[-1])
+
+        # frame_length = audio_tokens.shape[-1] // text_tokens.shape[-1]
+        # audio_pos_ids = text_pos_ids.repeat_interleave(frame_length)
+        # if audio_tokens.shape[-1] != audio_tokens.shape[-1]:
+        #     pad_length = audio_tokens.shape[-1] - audio_tokens.shape[-1]
+        #     padding = torch.ones(pad_length) * text_pos_ids.shape[-1]
+        #     audio_pos_ids = torch.cat([audio_pos_ids, padding], dim=-1)
 
         return torch.cat([text_pos_ids, audio_pos_ids], dim=-1)
 
