@@ -1,82 +1,48 @@
-import os
-
-import hydra
-import torch
-import wandb
-
-from dotenv import load_dotenv
-from omegaconf import DictConfig
+from unsloth import FastLanguageModel
 from transformers import TrainingArguments, Trainer
-
-from salt.utils.data_utils import prepare_data
-from salt.utils.debug_utils import verify_audio_from_tokens_reconstruction
-from salt.utils.loading_utils import prepare_model_and_tokenizer, load_audio_tokenizer
-from salt.utils.training_utils import collate_fn, fix_seed
-
-
-DEBUG = False
+import os
+import yaml
+import argparse
+import torch
+from src.dataset_builder import load_datasets, filter_by_length
 
 
-@hydra.main(config_path="configs", config_name="default")
-def main(config: DictConfig):
-    if config.path_to_cache is not None:
-        os.environ["HF_HOME"] = config.path_to_cache
-    torch.backends.cuda.matmul.allow_tf32 = config.allow_tf32
-    torch.backends.cudnn.allow_tf32 = config.allow_tf32
-    torch._dynamo.config.suppress_errors = False
-    torch._inductor.config.debug = True
+parser = argparse.ArgumentParser()
+parser.add_argument("--config", type=str, required=True, help="Path to config file")
+args = parser.parse_args()
 
-    load_dotenv()
-    wandb.login(key=os.getenv("WB_KEY"))
+with open(args.config, "r") as f:
+    config = yaml.safe_load(f)
 
-    fix_seed(42)
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["WANDB_ENTITY"] = config["wandb"]["entity"]
+os.environ["WANDB_PROJECT"] = config["wandb"]["project"]
 
-    training_args = TrainingArguments(
-        output_dir=config.output_dir,
-        # Training
-        per_device_train_batch_size=config.train_batch_size,
-        per_device_eval_batch_size=config.eval_batch_size,
-        num_train_epochs=config.num_train_epochs,
-        learning_rate=config.learning_rate,
-        weight_decay=config.weight_decay,
-        max_grad_norm=config.max_grad_norm,
-        lr_scheduler_type=config.lr_scheduler_type,
-        warmup_steps=config.num_warmup_steps,
-        gradient_accumulation_steps=config.gradient_accumulation_steps,
-        optim=config.optim,
-        torch_compile=config.torch_compile,
-        # Checkpoints
-        save_strategy=config.save_strategy,
-        save_steps=config.save_steps,
-        save_total_limit=config.save_total_limit,
-        # Eval
-        eval_strategy=config.eval_strategy,
-        eval_steps=config.eval_steps,
-        # Logging
-        report_to=["wandb"],
-        logging_steps=50,
-        run_name=config.wandb_project_name,
-    )
-
-    model, tokenizer = prepare_model_and_tokenizer(config)
-    train_data, val_data = prepare_data(config, tokenizer)
-    max_seq_length = config.max_text_tokens + config.max_audio_tokens
-
-    if DEBUG:
-        verify_audio_from_tokens_reconstruction(config, train_data[0]["input_ids"])
-
-    trainer = Trainer(
-        model,
-        tokenizer=tokenizer,
-        args=training_args,
-        # Data settings
-        train_dataset=train_data,
-        eval_dataset=val_data,
-        data_collator=lambda x: collate_fn(x, tokenizer, max_seq_length),
-    )
-
-    trainer.train()
+torch.backends.cudnn.benchmark = True
 
 
-if __name__ == "__main__":
-    main()
+model, tokenizer = FastLanguageModel.from_pretrained(
+    model_name=config["model"]["language_model"],
+    max_seq_length=config["model"]["max_initial_seq_length"],
+    dtype=torch.bfloat16,
+    full_finetuning=True,
+)
+
+audio_special_tokens = [
+    f"<|bigcodec_{i}|>" for i in range(config["audio_codec"]["codebook_size"])
+]
+tokenizer.add_tokens(audio_special_tokens)
+model.resize_token_embeddings(len(tokenizer))
+
+
+combined_train = load_datasets(config["datasets"], split_name="train")
+
+train_dataset = filter_by_length(
+    dataset=combined_train,
+    tokenizer=tokenizer,
+    max_text_length=config["model"]["max_text_length"],
+    max_audio_tokens=config["model"]["max_audio_tokens"],
+    num_proc=config["datasets"].get("num_proc", 1),
+)
+
+print(f"Training dataset ready: {len(train_dataset):,} examples\n")

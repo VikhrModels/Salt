@@ -1,7 +1,0 @@
-quantizer_config_path: null
-quantizer_ckpt_path: "/workspace/Salt/checkpoints/bigcodec/bigcodec.pt"
-quantizer_type: "bigcodec"
-
-n_audio_tokens: 8192
-n_codebooks: 1
-sample_rate: 16_000

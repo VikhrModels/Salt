@@ -1,0 +1,53 @@
+wandb:
+  entity: "vikhr-audio"
+  project: "Salt"
+
+datasets:
+  train:
+    - name: "Vikhrmodels/ToneBooksPlus_quantized-bigcodec"
+      split: "train"
+      columns: ["text", "audio_tokens"]  
+    - name: "Vikhrmodels/ToneSlavic_quantized-bigcodec"
+      split: "train"
+      columns: ["text", "audio_tokens"] 
+
+  clean_datasets: true
+  num_proc: 16
+
+audio_codec:
+  codebook_size: 8192
+
+model:
+  language_model: "unsloth/gemma-3-270m-it"
+  dtype: "bfloat16"
+  max_initial_seq_length: 3072
+  max_text_length: 512
+  max_audio_tokens: 2048
+
+training:
+  output_dir: "./asr_qwen_ckpts"
+  per_device_train_batch_size: 16
+  per_device_eval_batch_size: 16
+  dataloader_num_workers: 16
+  save_total_limit: 7
+  num_train_epochs: 5
+  warmup_ratio: 0.05
+  learning_rate: 3e-4
+  bf16: true
+  eval_strategy: "steps"
+  save_strategy: "steps"
+  eval_steps: 1500
+  save_steps: 10000
+  logging_steps: 50
+  report_to: "wandb"
+  save_safetensors: false
+  optim: "adamw_torch"
+  lr_scheduler_type: "cosine"
+
+generation:
+  max_new_tokens: 2048
+  do_sample: false
+  num_beams: 5
+  early_stopping: true
+  repetition_penalty: 1.2
+  temperature: 0.79

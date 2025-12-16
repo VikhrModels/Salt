@@ -1,8 +1,0 @@
-datasets:
-  - path: "Vikhrmodels/ToneBooksPlus_quantized-bigcodec"
-    type: "tts_instruct"
-  - path: "Vikhrmodels/ToneBooksPlus_quantized-bigcodec"
-    type: "asr_instruct"
-  - path: "Vikhrmodels/ToneBooksPlus_quantized-bigcodec"
-    type: "text"
-
