@@ -24,19 +24,19 @@ model:
   max_text_length: 512
   max_audio_tokens: 2048
 
-training:
+training_args:
   output_dir: "./asr_qwen_ckpts"
   per_device_train_batch_size: 16
-  per_device_eval_batch_size: 16
+  # per_device_eval_batch_size: 16
   dataloader_num_workers: 16
   save_total_limit: 7
   num_train_epochs: 5
   warmup_ratio: 0.05
-  learning_rate: 3e-4
+  learning_rate: 0.0003
   bf16: true
-  eval_strategy: "steps"
+  # eval_strategy: "steps"
   save_strategy: "steps"
-  eval_steps: 1500
+  # eval_steps: 1500
   save_steps: 10000
   logging_steps: 50
   report_to: "wandb"

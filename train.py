@@ -18,6 +18,7 @@ with open(args.config, "r") as f:
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["WANDB_ENTITY"] = config["wandb"]["entity"]
 os.environ["WANDB_PROJECT"] = config["wandb"]["project"]
+os.environ["TORCH_COMPILE_DISABLE"] = "1"
 
 torch.backends.cudnn.benchmark = True
 
