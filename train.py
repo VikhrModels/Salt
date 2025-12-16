@@ -5,6 +5,7 @@ import yaml
 import argparse
 import torch
 from src.dataset_builder import load_datasets, filter_by_length
+from src.dataset import SaltBaseDataset
 
 
 parser = argparse.ArgumentParser()
@@ -26,6 +27,7 @@ model, tokenizer = FastLanguageModel.from_pretrained(
     max_seq_length=config["model"]["max_initial_seq_length"],
     dtype=torch.bfloat16,
     full_finetuning=True,
+    device_map="cuda:1"
 )
 
 audio_special_tokens = [
@@ -46,3 +48,22 @@ train_dataset = filter_by_length(
 )
 
 print(f"Training dataset ready: {len(train_dataset):,} examples\n")
+
+print(train_dataset)
+
+train_dataset = SaltBaseDataset(
+    tokenizer=tokenizer,
+    hf_dataset=train_dataset,
+)
+
+
+training_args = TrainingArguments(**config["training_args"])
+
+
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=train_dataset,
+)
+
+trainer.train()
