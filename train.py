@@ -18,7 +18,6 @@ with open(args.config, "r") as f:
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["WANDB_ENTITY"] = config["wandb"]["entity"]
 os.environ["WANDB_PROJECT"] = config["wandb"]["project"]
-os.environ["TORCH_COMPILE_DISABLE"] = "1"
 
 torch.backends.cudnn.benchmark = True
 
@@ -28,7 +27,6 @@ model, tokenizer = FastLanguageModel.from_pretrained(
     max_seq_length=config["model"]["max_initial_seq_length"],
     dtype=torch.bfloat16,
     full_finetuning=True,
-    device_map="cuda:1"
 )
 
 audio_special_tokens = [
@@ -55,6 +53,8 @@ print(train_dataset)
 train_dataset = SaltBaseDataset(
     tokenizer=tokenizer,
     hf_dataset=train_dataset,
+    max_text_length=config["model"]["max_text_length"],
+    max_audio_sequence_length=config["model"]["max_audio_tokens"],
 )
 
 

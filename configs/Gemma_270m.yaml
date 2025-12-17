@@ -7,9 +7,9 @@ datasets:
     - name: "Vikhrmodels/ToneBooksPlus_quantized-bigcodec"
       split: "train"
       columns: ["text", "audio_tokens"]  
-    - name: "Vikhrmodels/ToneSlavic_quantized-bigcodec"
-      split: "train"
-      columns: ["text", "audio_tokens"] 
+    # - name: "Vikhrmodels/ToneSlavic_quantized-bigcodec"
+    #   split: "train"
+    #   columns: ["text", "audio_tokens"] 
 
   clean_datasets: true
   num_proc: 16
@@ -20,9 +20,9 @@ audio_codec:
 model:
   language_model: "unsloth/gemma-3-270m-it"
   dtype: "bfloat16"
-  max_initial_seq_length: 3072
-  max_text_length: 512
-  max_audio_tokens: 2048
+  max_initial_seq_length: 800
+  max_text_length: 256
+  max_audio_tokens: 512
 
 training_args:
   output_dir: "./asr_qwen_ckpts"
